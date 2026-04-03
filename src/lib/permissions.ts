@@ -111,23 +111,53 @@ export const ROLE_PERMISSIONS: Record<string, string[]> = {
  * Checks if a user's roles grant access to a module:action.
  */
 export function hasPermission(
-  userRoles: string[],
-  module: string,
-  action: string,
+  userPermissions: string[],
+  requiredPermission: string,
   isSuperAdmin = false,
 ): boolean {
   if (isSuperAdmin) return true;
 
-  for (const role of userRoles) {
-    const perms = ROLE_PERMISSIONS[role];
-    if (!perms) continue;
+  // Superadmin wildcard
+  if (userPermissions.includes('*:*')) return true;
 
-    if (perms.includes('*:*')) return true;
-    if (perms.includes(`${module}:*`)) return true;
-    if (perms.includes(`${module}:${action}`)) return true;
+  // Verificar permissão exata
+  if (userPermissions.includes(requiredPermission)) {
+    return true;
+  }
+
+  // Verificar wildcards
+  const [requiredModule] = requiredPermission.split(':');
+
+  // module:* permite qualquer ação no módulo
+  if (userPermissions.includes(`${requiredModule}:*`)) {
+    return true;
   }
 
   return false;
+}
+
+/**
+ * Checks if user has any of the required permissions (OR logic)
+ */
+export function hasAnyPermission(
+  userPermissions: string[],
+  requiredPermissions: string[],
+  isSuperAdmin = false,
+): boolean {
+  if (isSuperAdmin) return true;
+  return requiredPermissions.some(perm => hasPermission(userPermissions, perm));
+}
+
+/**
+ * Checks if user has all required permissions (AND logic)
+ */
+export function hasAllPermissions(
+  userPermissions: string[],
+  requiredPermissions: string[],
+  isSuperAdmin = false,
+): boolean {
+  if (isSuperAdmin) return true;
+  return requiredPermissions.every(perm => hasPermission(userPermissions, perm));
 }
 
 /**
@@ -140,6 +170,20 @@ export function getPermissionsForRoles(roles: string[]): string[] {
     if (perms) perms.forEach(p => permissions.add(p));
   }
   return Array.from(permissions);
+}
+
+/**
+ * Checks if user has specific role
+ */
+export function hasRole(userRoles: string[], requiredRole: string): boolean {
+  return userRoles.includes(requiredRole);
+}
+
+/**
+ * Checks if user has any of the required roles
+ */
+export function hasAnyRole(userRoles: string[], requiredRoles: string[]): boolean {
+  return requiredRoles.some(role => userRoles.includes(role));
 }
 
 /**

@@ -1,78 +1,59 @@
 import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { apiResponse, apiError, withAuth, getPaginationParams, paginatedResponse, auditLog } from '@/lib/api-helpers';
-import { tenantWhere } from '@/lib/tenant';
-import type { JwtPayload } from '@/lib/auth';
+import { withAuth, apiResponse, apiError, paginatedResponse } from '@/lib/api-helpers';
+import { CommitteeService, committeeFiltersSchema } from '@/lib/services/committee-service';
+import { z } from 'zod';
 
-async function handleGet(request: NextRequest, auth: JwtPayload) {
-  const { searchParams } = new URL(request.url);
-  const { page, limit, skip } = getPaginationParams(searchParams);
-  const search = searchParams.get('search') || '';
-  const type = searchParams.get('type') || '';
-  const status = searchParams.get('status') || '';
+const createCommitteeSchema = z.object({
+  name: z.string().min(1, 'Nome é obrigatório'),
+  type: z.enum(['CENTRAL', 'REGIONAL']),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  neighborhood: z.string().optional(),
+  region: z.string().optional(),
+  zipCode: z.string().optional(),
+  phone: z.string().optional(),
+  email: z.string().optional(),
+  responsibleName: z.string().optional(),
+  parentId: z.string().optional(),
+  observations: z.string().optional()
+});
 
-  const where = {
-    ...tenantWhere(auth.tenantId),
-    ...(search ? { name: { contains: search, mode: 'insensitive' as const } } : {}),
-    ...(type ? { type: type as never } : {}),
-    ...(status ? { status: status as never } : {}),
-  };
+import type { User } from '@prisma/client';
 
-  const [committees, total] = await Promise.all([
-    prisma.committee.findMany({
-      where,
-      include: {
-        parent: { select: { id: true, name: true } },
-        _count: { select: { teams: true, children: true, actions: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-    }),
-    prisma.committee.count({ where }),
-  ]);
+async function handleGET(req: NextRequest, tenantId: string, user: User) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const filters = committeeFiltersSchema.parse({
+      page: searchParams.get('page') || undefined,
+      limit: searchParams.get('limit') || undefined,
+      search: searchParams.get('search') || undefined,
+      status: searchParams.get('status') || undefined,
+      type: searchParams.get('type') || undefined
+    });
 
-  return paginatedResponse(committees, total, page, limit);
-}
-
-async function handlePost(request: NextRequest, auth: JwtPayload) {
-  const body = await request.json();
-  const { name, type, address, city, state, neighborhood, region, zipCode, phone, email, responsibleName, parentId, observations } = body;
-
-  if (!name || !type) {
-    return apiError('Nome e tipo são obrigatórios', 400);
+    const result = await CommitteeService.list(tenantId, filters);
+    return paginatedResponse(result.data, result.pagination.total, filters.page, filters.limit);
+  } catch (error) {
+    return apiError('Erro ao buscar comitês', 500);
   }
-
-  const committee = await prisma.committee.create({
-    data: {
-      tenantId: auth.tenantId,
-      name,
-      type,
-      address,
-      city,
-      state,
-      neighborhood,
-      region,
-      zipCode,
-      phone,
-      email,
-      responsibleName,
-      parentId,
-      observations,
-    },
-  });
-
-  await auditLog({
-    tenantId: auth.tenantId,
-    userId: auth.userId,
-    action: 'CREATE',
-    entityType: 'committee',
-    entityId: committee.id,
-    newValues: committee,
-  });
-
-  return apiResponse(committee, 201);
 }
 
-export const GET = withAuth(handleGet, { module: 'committees', action: 'read' });
-export const POST = withAuth(handlePost, { module: 'committees', action: 'create' });
+async function handlePOST(req: NextRequest, tenantId: string, user: User) {
+  try {
+    const body = await req.json();
+    const validatedData = createCommitteeSchema.parse(body);
+
+    const committee = await CommitteeService.create(validatedData, tenantId, user.id);
+    return apiResponse(committee, 'Comitê criado com sucesso', 201);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return apiError('Dados inválidos: ' + error.issues.map(e => e.message).join(', '), 400);
+    }
+    const message = error instanceof Error ? error.message : 'Erro ao criar comitê';
+    return apiError(message, 500);
+  }
+}
+
+export const GET = withAuth(handleGET, { module: 'committees', action: 'read' });
+export const POST = withAuth(handlePOST, { module: 'committees', action: 'create' });

@@ -2,9 +2,9 @@ import { NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
 import { apiResponse, apiError, withAuth, getPaginationParams, paginatedResponse, auditLog } from '@/lib/api-helpers';
 import { tenantWhere } from '@/lib/tenant';
-import type { JwtPayload } from '@/lib/auth';
+import type { AccessTokenPayload } from '@/lib/auth';
 
-async function handleGet(request: NextRequest, auth: JwtPayload) {
+async function handleGet(request: NextRequest, auth: AccessTokenPayload) {
   const { searchParams } = new URL(request.url);
   const { page, limit, skip } = getPaginationParams(searchParams);
   const search = searchParams.get('search') || '';
@@ -35,7 +35,7 @@ async function handleGet(request: NextRequest, auth: JwtPayload) {
   return paginatedResponse(teams, total, page, limit);
 }
 
-async function handlePost(request: NextRequest, auth: JwtPayload) {
+async function handlePost(request: NextRequest, auth: AccessTokenPayload) {
   const body = await request.json();
   const { name, committeeId, supervisorName, status } = body;
 

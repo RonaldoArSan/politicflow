@@ -1,8 +1,13 @@
-require('dotenv').config();
-const { PrismaClient } = require('@prisma/client');
-const bcrypt = require('bcryptjs');
+import 'dotenv/config';
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { withAccelerate } from '@prisma/extension-accelerate';
+import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient({ datasource: { url: process.env.DATABASE_URL } });
+const prisma = new PrismaClient({
+  adapter: new PrismaPg(process.env.DATABASE_URL || ''),
+  log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+}).$extends(withAccelerate());
 
 async function main() {
   console.log('🌱 Starting seed...');
@@ -168,19 +173,56 @@ async function main() {
   console.log('✅ Created 5 users');
 
   // ── Committees ─────────────────────────────────────────────
-  await prisma.committee.createMany({
-    data: [
-      { tenantId: tenant.id, name: 'Comitê Central Campanha', type: 'CENTRAL', city: 'São Paulo', neighborhood: 'Centro', responsibleName: 'Maria Santos', status: 'ACTIVE' },
-      { tenantId: tenant.id, name: 'Comitê Zona Norte', type: 'REGIONAL', city: 'São Paulo', neighborhood: 'Santana', responsibleName: 'Carlos Oliveira', status: 'ACTIVE' },
-      { tenantId: tenant.id, name: 'Comitê Zona Sul', type: 'REGIONAL', city: 'São Paulo', neighborhood: 'Campo Belo', responsibleName: 'Ana Lima', status: 'ACTIVE' },
-    ],
-    skipDuplicates: true,
-  });
-  console.log('✅ Created 3 committees');
+  const committeeData = [
+    { id: 'demo-com-001', name: 'Comitê Central Campanha', type: 'CENTRAL' as const, city: 'São Paulo', neighborhood: 'Centro', responsibleName: 'Maria Santos' },
+    { id: 'demo-com-002', name: 'Comitê Zona Norte', type: 'REGIONAL' as const, city: 'São Paulo', neighborhood: 'Santana', responsibleName: 'Carlos Oliveira' },
+    { id: 'demo-com-003', name: 'Comitê Zona Sul', type: 'REGIONAL' as const, city: 'São Paulo', neighborhood: 'Interlagos', responsibleName: 'Ana Lima' },
+    { id: 'demo-com-004', name: 'Comitê Zona Leste', type: 'REGIONAL' as const, city: 'São Paulo', neighborhood: 'Itaquera', responsibleName: 'Pedro Alves' },
+    { id: 'demo-com-005', name: 'Comitê Zona Oeste', type: 'REGIONAL' as const, city: 'São Paulo', neighborhood: 'Lapa', responsibleName: 'Fernanda Costa' },
+  ];
+
+  const createdCommittees = [];
+  for (const com of committeeData) {
+    const committee = await prisma.committee.upsert({
+      where: { id: com.id },
+      update: { ...com, tenantId: tenant.id, status: 'ACTIVE' },
+      create: { ...com, tenantId: tenant.id, status: 'ACTIVE' },
+    });
+    createdCommittees.push(committee);
+  }
+  console.log(`✅ Created ${createdCommittees.length} committees`);
+
+  // ── Teams ──────────────────────────────────────────────────
+  const teamData = [
+    { name: 'Equipe Mobilização Centro', commId: 'demo-com-001', supervisor: 'Roberto Silva' },
+    { name: 'Equipe Comunicação Digital', commId: 'demo-com-001', supervisor: 'Julia Lima' },
+    { name: 'Equipe Voluntários ZN', commId: 'demo-com-002', supervisor: 'Fernando Souza' },
+    { name: 'Equipe Mobilizadores ZS', commId: 'demo-com-003', supervisor: 'Ricardo Gomes' },
+    { name: 'Equipe Logística Eventos', commId: 'demo-com-004', supervisor: 'Sonia Abrão' },
+  ];
+
+  for (const t of teamData) {
+    await prisma.team.upsert({
+      where: { id: `team-${t.name.toLowerCase().replace(/ /g, '-')}` },
+      update: {},
+      create: {
+        id: `team-${t.name.toLowerCase().replace(/ /g, '-')}`,
+        tenantId: tenant.id,
+        committeeId: t.commId,
+        name: t.name,
+        supervisorName: t.supervisor,
+        status: 'ACTIVE',
+      },
+    });
+  }
+  console.log('✅ Created 5 teams linked to committees');
 
   // ── Candidate ──────────────────────────────────────────────
-  await prisma.candidate.create({
-    data: {
+  await prisma.candidate.upsert({
+    where: { id: 'demo-candidate-001' },
+    update: {},
+    create: {
+      id: 'demo-candidate-001',
       tenantId: tenant.id,
       name: 'Dr. Roberto Mendonça',
       position: 'Prefeito',

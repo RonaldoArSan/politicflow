@@ -2,9 +2,9 @@ import { NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
 import { apiResponse, apiError, withAuth, getPaginationParams, paginatedResponse, auditLog } from '@/lib/api-helpers';
 import { tenantWhere } from '@/lib/tenant';
-import type { JwtPayload } from '@/lib/auth';
+import type { AccessTokenPayload } from '@/lib/auth';
 
-async function handleGet(request: NextRequest, auth: JwtPayload) {
+async function handleGet(request: NextRequest, auth: AccessTokenPayload) {
   const { searchParams } = new URL(request.url);
   const { page, limit, skip } = getPaginationParams(searchParams);
   const search = searchParams.get('search') || '';
@@ -45,7 +45,7 @@ async function handleGet(request: NextRequest, auth: JwtPayload) {
   return paginatedResponse(actions, total, page, limit);
 }
 
-async function handlePost(request: NextRequest, auth: JwtPayload) {
+async function handlePost(request: NextRequest, auth: AccessTokenPayload) {
   const body = await request.json();
   const {
     title, type, description, startDate, endDate,
@@ -92,7 +92,7 @@ async function handlePost(request: NextRequest, auth: JwtPayload) {
     newValues: { title, type, startDate },
   });
 
-  return apiResponse(action, 201);
+  return apiResponse(action, 'Ação criada com sucesso', 201);
 }
 
 export const GET = withAuth(handleGet, { module: 'actions', action: 'read' });

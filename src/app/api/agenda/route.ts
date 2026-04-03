@@ -1,95 +1,47 @@
 import { NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
-import { apiResponse, apiError, withAuth, getPaginationParams, paginatedResponse, auditLog } from '@/lib/api-helpers';
-import { tenantWhere } from '@/lib/tenant';
-import type { JwtPayload } from '@/lib/auth';
+import { withAuth, apiResponse, apiError, paginatedResponse } from '@/lib/api-helpers';
+import { ScheduleService, scheduleFiltersSchema, createScheduleSchema } from '@/lib/services/schedule-service';
+import { z } from 'zod';
 
-async function handleGet(request: NextRequest, auth: JwtPayload) {
-  const { searchParams } = new URL(request.url);
-  const { page, limit, skip } = getPaginationParams(searchParams);
-  const search = searchParams.get('search') || '';
-  const type = searchParams.get('type') || '';
-  const status = searchParams.get('status') || '';
-  const dateFrom = searchParams.get('dateFrom');
-  const dateTo = searchParams.get('dateTo');
+import type { User } from '@prisma/client';
 
-  const where = {
-    ...tenantWhere(auth.tenantId),
-    ...(search ? { title: { contains: search, mode: 'insensitive' as const } } : {}),
-    ...(type ? { type: type as never } : {}),
-    ...(status ? { status: status as never } : {}),
-    ...(dateFrom || dateTo ? {
-      startDate: {
-        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
-        ...(dateTo ? { lte: new Date(dateTo) } : {}),
-      },
-    } : {}),
-  };
+async function handleGET(req: NextRequest, tenantId: string, user: User) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const filters = scheduleFiltersSchema.parse({
+      page: searchParams.get('page') || undefined,
+      limit: searchParams.get('limit') || undefined,
+      search: searchParams.get('search') || undefined,
+      status: searchParams.get('status') || undefined,
+      type: searchParams.get('type') || undefined,
+      startDate: searchParams.get('startDate') || undefined,
+      endDate: searchParams.get('endDate') || undefined,
+      candidateId: searchParams.get('candidateId') || undefined,
+      isPublic: searchParams.get('isPublic') || undefined
+    });
 
-  const [schedules, total] = await Promise.all([
-    prisma.schedule.findMany({
-      where,
-      include: {
-        candidate: { select: { id: true, name: true } },
-        createdBy: { select: { id: true, name: true } },
-      },
-      orderBy: { startDate: 'asc' },
-      skip,
-      take: limit,
-    }),
-    prisma.schedule.count({ where }),
-  ]);
-
-  return paginatedResponse(schedules, total, page, limit);
-}
-
-async function handlePost(request: NextRequest, auth: JwtPayload) {
-  const body = await request.json();
-  const {
-    title, description, type, startDate, endDate, allDay,
-    location, responsibleName, briefing, isPublic,
-    participants, checklist, candidateId,
-  } = body;
-
-  if (!title || !type || !startDate) {
-    return apiError('Título, tipo e data são obrigatórios', 400);
+    const result = await ScheduleService.list(tenantId, filters);
+    return paginatedResponse(result.data, result.pagination.total, filters.page, filters.limit);
+  } catch (error) {
+    return apiError('Erro ao buscar agendas', 500);
   }
-
-  const schedule = await prisma.schedule.create({
-    data: {
-      tenantId: auth.tenantId,
-      title,
-      description,
-      type,
-      startDate: new Date(startDate),
-      endDate: endDate ? new Date(endDate) : null,
-      allDay: allDay || false,
-      location,
-      responsibleName,
-      briefing,
-      isPublic: isPublic || false,
-      participants: participants || [],
-      checklist,
-      candidateId,
-      createdById: auth.userId,
-    },
-    include: {
-      candidate: { select: { id: true, name: true } },
-      createdBy: { select: { id: true, name: true } },
-    },
-  });
-
-  await auditLog({
-    tenantId: auth.tenantId,
-    userId: auth.userId,
-    action: 'CREATE',
-    entityType: 'schedule',
-    entityId: schedule.id,
-    newValues: { title, type, startDate },
-  });
-
-  return apiResponse(schedule, 201);
 }
 
-export const GET = withAuth(handleGet, { module: 'agenda', action: 'read' });
-export const POST = withAuth(handlePost, { module: 'agenda', action: 'create' });
+async function handlePOST(req: NextRequest, tenantId: string, user: User) {
+  try {
+    const body = await req.json();
+    const validatedData = createScheduleSchema.parse(body);
+
+    const schedule = await ScheduleService.create(validatedData, tenantId, user.id);
+    return apiResponse(schedule, 'Agenda criada com sucesso', 201);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return apiError('Dados inválidos: ' + error.issues.map(e => e.message).join(', '), 400);
+    }
+    const message = error instanceof Error ? error.message : 'Erro ao criar agenda';
+    return apiError(message, 500);
+  }
+}
+
+export const GET = withAuth(handleGET, { module: 'agenda', action: 'read' });
+export const POST = withAuth(handlePOST, { module: 'agenda', action: 'create' });

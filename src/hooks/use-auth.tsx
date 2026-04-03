@@ -143,23 +143,15 @@ export function useAuth() {
 export function useDemoAuth() {
   const { user, isAuthenticated, isLoading } = useAuth();
 
-  const demoLogin = useCallback(() => {
-    const demoUser: User = {
-      id: 'demo-user-001',
-      name: 'Carlos Mendes',
-      email: 'carlos@campanha.com',
-      avatar: undefined,
-      roles: ['tenant_admin'],
-      isSuperAdmin: false,
-      tenant: {
-        id: 'demo-tenant-001',
-        name: 'Campanha Prefeito 2026',
-        slug: 'campanha-prefeito-2026',
-      },
-    };
+  const demoLogin = useCallback(async () => {
+    const res = await fetch('/api/auth/demo', { method: 'POST' });
+    const data = await res.json();
+    if (!data.success) return;
 
-    localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, 'demo-token');
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(demoUser));
+    const { user: userData, accessToken: token, refreshToken } = data.data;
+    localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, token);
+    localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData));
     window.location.href = '/dashboard';
   }, []);
 

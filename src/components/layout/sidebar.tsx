@@ -7,7 +7,7 @@ import {
   LayoutDashboard, CalendarDays, Zap, Users2, Users,
   Mic2, Star, Contact2, AlertCircle, ClipboardList,
   Settings, LogOut, Landmark, ChevronLeft, ChevronRight,
-  Shield, Building2, BarChart3, Bell, Menu, X
+  Shield, BarChart3, Bell,  X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';

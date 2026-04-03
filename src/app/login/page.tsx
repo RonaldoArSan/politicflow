@@ -26,8 +26,7 @@ export default function LoginPage() {
       await login(email, password);
       router.push('/dashboard');
     } catch (err) {
-      // Fallback to demo login for development
-      demoLogin();
+      setError(err instanceof Error ? err.message : 'Credenciais inválidas');
     } finally {
       setIsSubmitting(false);
     }

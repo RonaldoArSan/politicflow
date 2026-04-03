@@ -1,13 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAccessToken, type JwtPayload } from './auth';
+import { verifyToken, getTokenFromRequest, type AccessTokenPayload } from './auth';
 import { hasPermission } from './permissions';
 import prisma from './prisma';
 
 /**
  * Standard API response wrapper.
  */
-export function apiResponse<T>(data: T, status = 200) {
-  return NextResponse.json({ success: true, data }, { status });
+export function apiResponse<T>(data: T, messageOrStatus: string | number = '', status = 200, pagination?: Record<string, unknown>) {
+  let message: string = '';
+  let finalStatus: number = 200;
+
+  if (typeof messageOrStatus === 'number') {
+    finalStatus = messageOrStatus;
+  } else {
+    message = messageOrStatus;
+    finalStatus = status;
+  }
+
+  const response: Record<string, unknown> = { success: true, data };
+  if (message) response.message = message;
+  if (pagination) response.pagination = pagination;
+  return NextResponse.json(response, { status: finalStatus });
 }
 
 export function apiError(message: string, status = 400, errors?: unknown) {
@@ -17,34 +30,13 @@ export function apiError(message: string, status = 400, errors?: unknown) {
 /**
  * Authenticates a request and returns the JWT payload.
  */
-export function authenticateRequest(request: NextRequest): JwtPayload | null {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  return verifyAccessToken(authHeader.substring(7));
+export function authenticateRequest(request: NextRequest): AccessTokenPayload | null {
+  const token = getTokenFromRequest(request);
+  if (!token) return null;
+  return verifyToken(token) as AccessTokenPayload;
 }
 
-/**
- * Higher-order handler that enforces authentication + optional permission check.
- */
-export function withAuth(
-  handler: (request: NextRequest, auth: JwtPayload) => Promise<NextResponse>,
-  options?: { module?: string; action?: string }
-) {
-  return async (request: NextRequest) => {
-    const auth = authenticateRequest(request);
-    if (!auth) {
-      return apiError('Não autorizado', 401);
-    }
-
-    if (options?.module && options?.action) {
-      if (!hasPermission(auth.roles, options.module, options.action, auth.isSuperAdmin)) {
-        return apiError('Sem permissão para esta ação', 403);
-      }
-    }
-
-    return handler(request, auth);
-  };
-}
+export { withAuth } from './middleware';
 
 /**
  * Logs an audit event.
@@ -60,23 +52,17 @@ export async function auditLog(params: {
   ipAddress?: string;
   userAgent?: string;
 }) {
-  try {
-    await prisma.auditLog.create({
-      data: {
-        tenantId: params.tenantId,
-        userId: params.userId,
-        action: params.action,
-        entityType: params.entityType,
-        entityId: params.entityId,
-        oldValues: params.oldValues ? JSON.parse(JSON.stringify(params.oldValues)) : undefined,
-        newValues: params.newValues ? JSON.parse(JSON.stringify(params.newValues)) : undefined,
-        ipAddress: params.ipAddress,
-        userAgent: params.userAgent,
-      },
-    });
-  } catch (error) {
-    console.error('Failed to create audit log:', error);
-  }
+  const { auditLog: logAudit } = await import('./audit');
+
+  await logAudit(
+    params.tenantId,
+    params.userId || null,
+    params.entityType,
+    params.action,
+    params.entityId || '',
+    params.oldValues,
+    params.newValues
+  );
 }
 
 /**

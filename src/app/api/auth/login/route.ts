@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
-import { verifyPassword, generateAccessToken, generateRefreshToken } from '@/lib/auth';
+import { verifyPassword, generateTokens } from '@/lib/auth';
 import { apiResponse, apiError, auditLog } from '@/lib/api-helpers';
 
 export async function POST(request: NextRequest) {
@@ -43,16 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     const roles = user.userRoles.map(ur => ur.role.slug);
-
-    const accessToken = generateAccessToken({
-      userId: user.id,
-      tenantId: user.tenantId,
-      email: user.email,
-      roles,
-      isSuperAdmin: user.isSuperAdmin,
-    });
-
-    const refreshToken = await generateRefreshToken(user.id);
+    const { accessToken, refreshToken } = await generateTokens(user, user.tenant);
 
     // Update last login
     await prisma.user.update({

@@ -3,9 +3,9 @@
 import React, { useState } from 'react';
 import useSWR from 'swr';
 import {
-  Plus, Search, Filter, MapPin, Phone, Mail,
-  MoreVertical, Building2, Users, ChevronDown, Edit, Trash2,
-  Zap, Loader2
+  Plus, Search, MapPin, Phone,
+  MoreVertical, Building2, Users,
+  Zap, Loader2, X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -26,6 +26,28 @@ interface Committee {
     actions: number;
   };
 }
+
+interface FormData {
+  name: string;
+  type: CommitteeType;
+  responsibleName: string;
+  city: string;
+  neighborhood: string;
+  address: string;
+  phone: string;
+  observations: string;
+}
+
+const EMPTY_FORM: FormData = {
+  name: '',
+  type: 'CENTRAL',
+  responsibleName: '',
+  city: '',
+  neighborhood: '',
+  address: '',
+  phone: '',
+  observations: '',
+};
 
 const TYPE_LABELS: Record<CommitteeType, string> = {
   CENTRAL: 'Central',
@@ -50,17 +72,76 @@ const fetcher = async (url: string) => {
   return json.data.items as Committee[];
 };
 
+const inputClass = 'w-full px-4 py-2.5 bg-surface-hover rounded-lg text-sm outline-none border border-transparent focus:border-accent/30 focus:ring-2 focus:ring-accent/20';
+const labelClass = 'block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1.5';
+
 export default function ComitesPage() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState<FormData>(EMPTY_FORM);
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
 
-  const { data: committees, error, isLoading } = useSWR<Committee[]>(
+  const { data: committees, error, isLoading, mutate } = useSWR<Committee[]>(
     `/api/committees?search=${search}&type=${typeFilter}`,
     fetcher
   );
 
   const filtered = committees || [];
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) {
+      setFormError('Nome é obrigatório.');
+      return;
+    }
+
+    setSubmitting(true);
+    setFormError('');
+
+    try {
+      const token = localStorage.getItem('pf_access_token');
+      const res = await fetch('/api/committees', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          type: form.type,
+          responsibleName: form.responsibleName || undefined,
+          city: form.city || undefined,
+          neighborhood: form.neighborhood || undefined,
+          address: form.address || undefined,
+          phone: form.phone || undefined,
+          observations: form.observations || undefined,
+        }),
+      });
+
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Erro ao criar comitê');
+
+      setShowForm(false);
+      setForm(EMPTY_FORM);
+      mutate();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Erro ao criar comitê');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleClose = () => {
+    setShowForm(false);
+    setForm(EMPTY_FORM);
+    setFormError('');
+  };
 
   return (
     <div>
@@ -106,7 +187,7 @@ export default function ComitesPage() {
         </div>
       </div>
 
-      {/* Results count & Loading */}
+      {/* Status */}
       {isLoading ? (
         <div className="flex items-center gap-2 text-primary mb-4 p-4 justify-center">
           <Loader2 className="w-5 h-5 animate-spin" />
@@ -114,7 +195,7 @@ export default function ComitesPage() {
         </div>
       ) : error ? (
         <div className="text-danger text-sm font-bold mb-4 p-4 text-center">
-           Erro ao carregar comitês. {(error as Error).message}
+          Erro ao carregar comitês. {(error as Error).message}
         </div>
       ) : (
         <p className="text-xs text-text-muted font-medium mb-4">{filtered.length} comitês encontrados</p>
@@ -127,7 +208,7 @@ export default function ComitesPage() {
             <div className="flex justify-between items-start mb-4">
               <div className="flex items-center gap-3">
                 <div className={cn(
-                  "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
+                  'w-10 h-10 rounded-lg flex items-center justify-center shrink-0',
                   committee.type === 'CENTRAL' ? 'bg-accent/10 text-accent' :
                   committee.type === 'REGIONAL' ? 'bg-info/10 text-info' :
                   committee.type === 'MUNICIPAL' ? 'bg-success/10 text-success' :
@@ -135,16 +216,12 @@ export default function ComitesPage() {
                 )}>
                   <Building2 className="w-5 h-5" />
                 </div>
-                <div>
-                  <span className={cn("badge mb-1", 
-                    committee.type === 'CENTRAL' ? 'badge-accent' : 'badge-neutral'
-                  )}>
-                    {TYPE_LABELS[committee.type]}
-                  </span>
-                </div>
+                <span className={cn('badge', committee.type === 'CENTRAL' ? 'badge-accent' : 'badge-neutral')}>
+                  {TYPE_LABELS[committee.type]}
+                </span>
               </div>
               <div className="flex items-center gap-1">
-                <span className={cn("badge", STATUS_CONFIG[committee.status].class)}>
+                <span className={cn('badge', STATUS_CONFIG[committee.status].class)}>
                   {STATUS_CONFIG[committee.status].label}
                 </span>
                 <button className="p-1 rounded-lg hover:bg-surface-hover opacity-0 group-hover:opacity-100 transition-all">
@@ -185,20 +262,33 @@ export default function ComitesPage() {
         ))}
       </div>
 
-      {/* New Committee Modal would go here */}
+      {/* Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowForm(false)}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={handleClose}>
           <div className="bg-surface-card rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <h3 className="font-headline font-bold text-xl text-primary mb-6">Novo Comitê</h3>
-            <form className="space-y-4" onSubmit={e => { e.preventDefault(); setShowForm(false); }}>
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1.5">Nome</label>
-                <input className="w-full px-4 py-2.5 bg-surface-hover rounded-lg text-sm outline-none border border-transparent focus:border-accent/30 focus:ring-2 focus:ring-accent/20" placeholder="Nome do comitê" />
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-headline font-bold text-xl text-primary">Novo Comitê</h3>
+              <button onClick={handleClose} className="p-1.5 rounded-lg hover:bg-surface-hover text-text-muted transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {formError && (
+              <div className="mb-4 p-3 rounded-lg bg-danger/10 border border-danger/20 text-danger text-sm font-medium">
+                {formError}
               </div>
+            )}
+
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              <div>
+                <label className={labelClass}>Nome *</label>
+                <input name="name" value={form.name} onChange={handleChange} className={inputClass} placeholder="Nome do comitê" required />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1.5">Tipo</label>
-                  <select className="w-full px-4 py-2.5 bg-surface-hover rounded-lg text-sm outline-none border border-transparent focus:border-accent/30 focus:ring-2 focus:ring-accent/20">
+                  <label className={labelClass}>Tipo</label>
+                  <select name="type" value={form.type} onChange={handleChange} className={inputClass}>
                     <option value="CENTRAL">Central</option>
                     <option value="REGIONAL">Regional</option>
                     <option value="MUNICIPAL">Municipal</option>
@@ -206,38 +296,48 @@ export default function ComitesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1.5">Responsável</label>
-                  <input className="w-full px-4 py-2.5 bg-surface-hover rounded-lg text-sm outline-none border border-transparent focus:border-accent/30 focus:ring-2 focus:ring-accent/20" placeholder="Nome do responsável" />
+                  <label className={labelClass}>Responsável</label>
+                  <input name="responsibleName" value={form.responsibleName} onChange={handleChange} className={inputClass} placeholder="Nome do responsável" />
                 </div>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1.5">Cidade</label>
-                  <input className="w-full px-4 py-2.5 bg-surface-hover rounded-lg text-sm outline-none border border-transparent focus:border-accent/30 focus:ring-2 focus:ring-accent/20" placeholder="Cidade" />
+                  <label className={labelClass}>Cidade</label>
+                  <input name="city" value={form.city} onChange={handleChange} className={inputClass} placeholder="Cidade" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1.5">Bairro</label>
-                  <input className="w-full px-4 py-2.5 bg-surface-hover rounded-lg text-sm outline-none border border-transparent focus:border-accent/30 focus:ring-2 focus:ring-accent/20" placeholder="Bairro" />
+                  <label className={labelClass}>Bairro</label>
+                  <input name="neighborhood" value={form.neighborhood} onChange={handleChange} className={inputClass} placeholder="Bairro" />
                 </div>
               </div>
+
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1.5">Endereço</label>
-                <input className="w-full px-4 py-2.5 bg-surface-hover rounded-lg text-sm outline-none border border-transparent focus:border-accent/30 focus:ring-2 focus:ring-accent/20" placeholder="Endereço completo" />
+                <label className={labelClass}>Endereço</label>
+                <input name="address" value={form.address} onChange={handleChange} className={inputClass} placeholder="Endereço completo" />
               </div>
+
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1.5">Telefone</label>
-                <input className="w-full px-4 py-2.5 bg-surface-hover rounded-lg text-sm outline-none border border-transparent focus:border-accent/30 focus:ring-2 focus:ring-accent/20" placeholder="(00) 00000-0000" />
+                <label className={labelClass}>Telefone</label>
+                <input name="phone" value={form.phone} onChange={handleChange} className={inputClass} placeholder="(00) 00000-0000" />
               </div>
+
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1.5">Observações</label>
-                <textarea className="w-full px-4 py-2.5 bg-surface-hover rounded-lg text-sm outline-none border border-transparent focus:border-accent/30 focus:ring-2 focus:ring-accent/20 resize-none h-20" placeholder="Observações..." />
+                <label className={labelClass}>Observações</label>
+                <textarea name="observations" value={form.observations} onChange={handleChange} className={cn(inputClass, 'resize-none h-20')} placeholder="Observações..." />
               </div>
+
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-2.5 rounded-xl border border-border text-text-secondary font-bold text-sm hover:bg-surface-hover transition-colors">
+                <button type="button" onClick={handleClose} className="flex-1 py-2.5 rounded-xl border border-border text-text-secondary font-bold text-sm hover:bg-surface-hover transition-colors">
                   Cancelar
                 </button>
-                <button type="submit" className="flex-1 gradient-accent text-white font-bold text-sm py-2.5 rounded-xl shadow shadow-accent/20 hover:shadow-lg transition-all">
-                  Salvar Comitê
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 gradient-accent text-white font-bold text-sm py-2.5 rounded-xl shadow shadow-accent/20 hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {submitting ? 'Salvando...' : 'Salvar Comitê'}
                 </button>
               </div>
             </form>
