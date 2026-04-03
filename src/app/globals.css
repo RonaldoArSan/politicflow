@@ -43,6 +43,37 @@
   --color-border-light: #f1f5f9;
 }
 
+/* Manual toggle via .dark class */
+:root.dark {
+  --color-surface: #020617;
+  --color-surface-card: #0f172a;
+  --color-surface-hover: #1e293b;
+  --color-surface-muted: #334155;
+  
+  --color-text-primary: #f8fafc;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+  
+  --color-border: #1e293b;
+  --color-border-light: #0f172a;
+  
+  --color-primary: #f8fafc;
+  --color-primary-light: #e2e8f0;
+
+  .glass {
+    background: rgba(15, 23, 42, 0.8) !important;
+    border-color: rgba(255, 255, 255, 0.05) !important;
+  }
+
+  .gradient-subtle {
+    background: linear-gradient(135deg, #0f172a 0%, #020617 100%) !important;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #334155;
+  }
+}
+
 @layer base {
   body {
     @apply bg-surface text-text-primary font-sans antialiased;

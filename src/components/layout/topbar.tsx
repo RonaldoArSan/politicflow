@@ -5,6 +5,7 @@ import { Bell, Search, Menu, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
 import { SearchDialog } from '@/components/search/search-dialog';
+import { ThemeToggle } from './theme-toggle';
 
 interface TopBarProps {
   title?: string;
@@ -79,6 +80,11 @@ export function TopBar({ title, breadcrumbs, onMenuClick }: TopBarProps) {
             <Bell className="w-5 h-5" />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger rounded-full ring-2 ring-surface-card" />
           </button>
+
+          {/* Theme Toggle */}
+          <div className="mx-1">
+            <ThemeToggle />
+          </div>
 
           {/* User avatar */}
           <div className="w-8 h-8 rounded-full gradient-accent flex items-center justify-center text-white text-xs font-bold ml-1">
