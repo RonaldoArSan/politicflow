@@ -43,11 +43,21 @@ async function handlePost(request: NextRequest, auth: AccessTokenPayload) {
     return apiError('O nome da equipe é obrigatório', 400);
   }
 
+  let committeeIdValue: string | null = null;
+  if (committeeId) {
+    const committeeExists = await prisma.committee.findFirst({
+      where: { id: committeeId, tenantId: auth.tenantId, deletedAt: null }
+    });
+    if (committeeExists) {
+      committeeIdValue = committeeId;
+    }
+  }
+
   const team = await prisma.team.create({
     data: {
       tenantId: auth.tenantId,
       name,
-      committeeId: committeeId || null,
+      committeeId: committeeIdValue,
       supervisorName,
       status: status || 'ACTIVE',
     },

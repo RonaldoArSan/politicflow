@@ -5,7 +5,7 @@ import { PlanLimits } from '../billing-limits';
 
 export const createCommitteeSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório').max(100),
-  type: z.enum(['CENTRAL', 'REGIONAL']),
+  type: z.enum(['CENTRAL', 'REGIONAL', 'MUNICIPAL', 'NEIGHBORHOOD']),
   address: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
@@ -28,7 +28,7 @@ export const committeeFiltersSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   search: z.preprocess((val) => (val === "" ? undefined : val), z.string().optional()),
   status: z.preprocess((val) => (val === "" ? undefined : val), z.enum(['ACTIVE', 'INACTIVE']).optional()),
-  type: z.preprocess((val) => (val === "" ? undefined : val), z.enum(['CENTRAL', 'REGIONAL']).optional())
+  type: z.preprocess((val) => (val === "" ? undefined : val), z.enum(['CENTRAL', 'REGIONAL', 'MUNICIPAL', 'NEIGHBORHOOD']).optional())
 });
 
 export class CommitteeService {
@@ -86,7 +86,7 @@ export class CommitteeService {
         orderBy: { createdAt: 'desc' },
         include: {
           parent: { select: { id: true, name: true } },
-          _count: { select: { children: true } }
+          _count: { select: { teams: true, actions: true } }
         }
       }),
       prisma.committee.count({ where })

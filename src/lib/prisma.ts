@@ -1,25 +1,26 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { withAccelerate } from '@prisma/extension-accelerate';
+import { Pool } from 'pg';
 
 const globalForPrisma = globalThis as unknown as {
-  prisma: ReturnType<typeof createPrismaClient> | undefined;
+  prisma: PrismaClient | undefined;
 };
 
-function createPrismaClient() {
-  const client = new PrismaClient({
-    adapter: new PrismaPg(process.env.DATABASE_URL || ''),
-    log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+const dbUrl = process.env.DATABASE_URL || '';
+
+console.log('Initializing Prisma Client with URL:', dbUrl ? dbUrl.split('@')[1] || 'standard-url' : 'empty');
+
+// Create a connection pool for PostgreSQL
+const connectionString = dbUrl;
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+
+export const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    adapter,
+    log: process.env.NODE_ENV === 'development' ? ['query', 'warn', 'error'] : ['error'],
   });
-
-  if (process.env.PRISMA_ACCELERATE_URL) {
-    return client.$extends(withAccelerate());
-  }
-
-  return client;
-}
-
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 

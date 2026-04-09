@@ -1,13 +1,17 @@
 'use client';
 
 import React, { useState } from 'react';
-import useSWR from 'swr';
 import {
   Plus, Search, MapPin, Phone,
   MoreVertical, Building2, Users,
   Zap, Loader2, X
 } from 'lucide-react';
+
+const inputClass = 'w-full px-4 py-2.5 bg-surface-hover rounded-lg text-sm outline-none border border-transparent focus:border-accent/30 focus:ring-2 focus:ring-accent/20';
+const labelClass = 'block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1.5';
+
 import { cn } from '@/lib/utils';
+import { CommitteeDetailModal } from '@/components/committees/committee-detail-modal';
 
 type CommitteeType = 'CENTRAL' | 'REGIONAL' | 'MUNICIPAL' | 'NEIGHBORHOOD';
 type UnitStatus = 'ACTIVE' | 'INACTIVE' | 'CLOSED';
@@ -62,18 +66,7 @@ const STATUS_CONFIG: Record<UnitStatus, { label: string; class: string }> = {
   CLOSED: { label: 'Fechado', class: 'badge-danger' },
 };
 
-const fetcher = async (url: string) => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('pf_access_token') : null;
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
-  });
-  const json = await res.json();
-  if (!json.success) throw new Error(json.error);
-  return json.data.items as Committee[];
-};
-
-const inputClass = 'w-full px-4 py-2.5 bg-surface-hover rounded-lg text-sm outline-none border border-transparent focus:border-accent/30 focus:ring-2 focus:ring-accent/20';
-const labelClass = 'block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1.5';
+import { useApi } from '@/hooks/use-api';
 
 export default function ComitesPage() {
   const [search, setSearch] = useState('');
@@ -82,13 +75,14 @@ export default function ComitesPage() {
   const [form, setForm] = useState<FormData>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
+  const [selectedCommittee, setSelectedCommittee] = useState<Committee | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
-  const { data: committees, error, isLoading, mutate } = useSWR<Committee[]>(
-    `/api/committees?search=${search}&type=${typeFilter}`,
-    fetcher
+  const { data: response, error, isLoading, mutate } = useApi<{ items: Committee[] }>(
+    `/api/committees?search=${search}&type=${typeFilter}`
   );
 
-  const filtered = committees || [];
+  const filtered = response?.items || [];
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -204,7 +198,14 @@ export default function ComitesPage() {
       {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map((committee) => (
-          <div key={committee.id} className="card-hover p-5 group">
+          <div
+            key={committee.id}
+            className="card-hover p-5 group cursor-pointer"
+            onClick={() => {
+              setSelectedCommittee(committee);
+              setShowDetailModal(true);
+            }}
+          >
             <div className="flex justify-between items-start mb-4">
               <div className="flex items-center gap-3">
                 <div className={cn(
@@ -262,7 +263,20 @@ export default function ComitesPage() {
         ))}
       </div>
 
-      {/* Modal */}
+      {/* Detail Modal */}
+      {selectedCommittee && (
+        <CommitteeDetailModal
+          committee={selectedCommittee}
+          isOpen={showDetailModal}
+          onClose={() => {
+            setShowDetailModal(false);
+            setSelectedCommittee(null);
+          }}
+          onUpdate={() => mutate()}
+        />
+      )}
+
+      {/* Create Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={handleClose}>
           <div className="bg-surface-card rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>

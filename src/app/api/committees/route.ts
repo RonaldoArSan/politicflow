@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 const createCommitteeSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório'),
-  type: z.enum(['CENTRAL', 'REGIONAL']),
+  type: z.enum(['CENTRAL', 'REGIONAL', 'MUNICIPAL', 'NEIGHBORHOOD']),
   address: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),

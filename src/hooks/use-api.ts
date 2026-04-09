@@ -1,57 +1,60 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import useSWR, { mutate as globalMutate } from 'swr';
+import { useCallback } from 'react';
 
-interface ApiOptions {
-  method?: string;
-  body?: unknown;
-  headers?: Record<string, string>;
-}
-
-interface ApiState<T> {
-  data: T | null;
-  error: string | null;
-  isLoading: boolean;
-}
-
-export function useApi<T = unknown>() {
-  const [state, setState] = useState<ApiState<T>>({
-    data: null,
-    error: null,
-    isLoading: false,
+const fetcher = async (url: string) => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('pf_access_token') : null;
+  const res = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
   });
 
-  const request = useCallback(async (url: string, options?: ApiOptions): Promise<T | null> => {
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
+  const json = await res.json();
+  if (!json.success) {
+    throw new Error(json.error || 'Erro na requisição');
+  }
 
-    try {
-      const token = localStorage.getItem('pf_access_token');
-      
-      const res = await fetch(url, {
-        method: options?.method || 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          ...options?.headers,
-        },
-        ...(options?.body ? { body: JSON.stringify(options.body) } : {}),
-      });
+  return json.data;
+};
 
-      const json = await res.json();
+export function useApi<T = unknown>(url?: string) {
+  const { data, error, isLoading, mutate } = useSWR<T>(url || null, fetcher);
 
-      if (!json.success) {
-        setState({ data: null, error: json.error, isLoading: false });
-        return null;
-      }
+  const request = useCallback(async (url: string, options?: { 
+    method?: string; 
+    body?: unknown; 
+    headers?: Record<string, string> 
+  }) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('pf_access_token') : null;
+    
+    const res = await fetch(url, {
+      method: options?.method || 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options?.headers,
+      },
+      ...(options?.body ? { body: JSON.stringify(options.body) } : {}),
+    });
 
-      setState({ data: json.data, error: null, isLoading: false });
-      return json.data;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro na requisição';
-      setState({ data: null, error: message, isLoading: false });
-      return null;
+    const json = await res.json();
+    
+    if (json.success) {
+      // Revalidate if this is the URL we are currently tracking
+      if (url === url) mutate();
     }
-  }, []);
 
-  return { ...state, request };
+    return json;
+  }, [mutate]);
+
+  return {
+    data: data || null,
+    error: error?.message || null,
+    isLoading,
+    mutate,
+    request,
+  };
 }

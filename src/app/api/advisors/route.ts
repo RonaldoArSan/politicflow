@@ -9,6 +9,7 @@ async function handleGet(request: NextRequest, auth: AccessTokenPayload) {
   const { page, limit, skip } = getPaginationParams(searchParams);
   const search = searchParams.get('search') || '';
   const status = searchParams.get('status') || '';
+  const unassigned = searchParams.get('unassigned') === 'true';
 
   const where = {
     ...tenantWhere(auth.tenantId),
@@ -16,6 +17,7 @@ async function handleGet(request: NextRequest, auth: AccessTokenPayload) {
       person: { name: { contains: search, mode: 'insensitive' as const } },
     } : {}),
     ...(status ? { status: status as never } : {}),
+    ...(unassigned ? { teamId: null } : {}),
   };
 
   const [advisors, total] = await Promise.all([
