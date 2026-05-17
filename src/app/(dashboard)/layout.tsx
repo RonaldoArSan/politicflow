@@ -28,6 +28,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -55,8 +56,8 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-surface flex">
-      <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
-      <main className="flex-1 lg:ml-64 flex flex-col min-h-screen transition-all duration-300">
+      <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} isCollapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
+      <main className={cn("flex-1 flex flex-col min-h-screen transition-all duration-300", sidebarCollapsed ? "lg:ml-18" : "lg:ml-64")}>
         <TopBar
           title={routeInfo?.title}
           breadcrumbs={routeInfo?.breadcrumbs}

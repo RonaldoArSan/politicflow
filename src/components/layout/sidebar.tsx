@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -35,11 +35,12 @@ const bottomNavItems = [
 interface SidebarProps {
   isOpen: boolean;
   onToggle: () => void;
+  isCollapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
 }
 
-export function Sidebar({ isOpen, onToggle }: SidebarProps) {
+export function Sidebar({ isOpen, onToggle, isCollapsed, onCollapsedChange }: SidebarProps) {
   const pathname = usePathname();
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const { user, logout } = useAuth();
 
   const handleLogout = async () => {
@@ -165,7 +166,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
 
         {/* Collapse toggle */}
         <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
+          onClick={() => onCollapsedChange(!isCollapsed)}
           className="hidden lg:flex items-center justify-center h-8 border-t border-border/50 text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors"
         >
           {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
