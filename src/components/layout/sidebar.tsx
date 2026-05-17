@@ -60,7 +60,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
       <aside
         className={cn(
           "fixed left-0 top-0 h-full bg-surface-card border-r border-border/50 flex flex-col z-50 transition-all duration-300 ease-in-out",
-          isCollapsed ? "w-[72px]" : "w-64",
+          isCollapsed ? "w-18" : "w-64",
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
@@ -111,10 +111,10 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
                   )}
                 >
                   {isActive && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-accent" />
+                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.75 h-5 rounded-r-full bg-accent" />
                   )}
                   <item.icon className={cn(
-                    "w-[18px] h-[18px] shrink-0",
+                    "w-4.5 h-4.5 shrink-0",
                     isActive && "text-accent"
                   )} />
                   {!isCollapsed && <span className="truncate">{item.label}</span>}
@@ -150,7 +150,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
                       : "text-text-secondary hover:bg-surface-hover hover:text-text-primary"
                   )}
                 >
-                  <item.icon className="w-[18px] h-[18px] shrink-0" />
+                  <item.icon className="w-4.5 h-4.5 shrink-0" />
                   {!isCollapsed && <span className="truncate">{item.label}</span>}
                   {isCollapsed && (
                     <div className="absolute left-full ml-2 px-2 py-1 bg-primary text-white text-xs font-medium rounded-md whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">

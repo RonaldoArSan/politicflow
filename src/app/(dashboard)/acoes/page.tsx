@@ -151,7 +151,7 @@ export default function AcoesPage() {
                     {action.location && (
                       <div className="flex items-center gap-1.5">
                         <MapPin className="w-3.5 h-3.5 text-text-muted" />
-                        <span className="truncate max-w-[180px]">{action.location}</span>
+                        <span className="truncate max-w-45">{action.location}</span>
                       </div>
                     )}
                     <div className="flex items-center gap-1.5">

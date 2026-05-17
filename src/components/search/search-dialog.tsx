@@ -12,19 +12,8 @@ interface SearchDialogProps {
 }
 
 export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
-  const { query, isOpen, setIsOpen, results, isLoading, error, handleSearch, clearSearch, groupByType } =
+  const { query, results, isLoading, error, handleSearch, clearSearch, groupByType } =
     useSearch();
-
-  // Sync with parent component
-  useEffect(() => {
-    setIsOpen(open);
-  }, [open, setIsOpen]);
-
-  useEffect(() => {
-    if (isOpen !== open) {
-      onOpenChange(isOpen);
-    }
-  }, [isOpen, open, onOpenChange]);
 
   // Keyboard shortcuts
   useEffect(() => {
