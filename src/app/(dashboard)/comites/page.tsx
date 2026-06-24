@@ -255,7 +255,7 @@ export default function ComitesPage() {
                   <span className="font-bold text-text-secondary">{committee._count?.actions || 0}</span> ações
                 </div>
               </div>
-              <div className="text-[10px] text-text-muted font-medium truncate max-w-[120px]">
+              <div className="text-[10px] text-text-muted font-medium truncate max-w-30">
                 {committee.responsibleName || 'Sem responsável'}
               </div>
             </div>

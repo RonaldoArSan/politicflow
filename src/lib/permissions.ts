@@ -58,6 +58,7 @@ export const TENANT_ROLES = {
  * Each role maps to a list of "module:action" permission strings.
  */
 export const ROLE_PERMISSIONS: Record<string, string[]> = {
+  'admin': ['*:*'], // Full access (for newly created users)
   [TENANT_ROLES.TENANT_ADMIN]: ['*:*'], // Full access
 
   [TENANT_ROLES.COORDENADOR_GERAL]: [

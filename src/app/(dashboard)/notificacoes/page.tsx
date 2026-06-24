@@ -1,75 +1,121 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  Bell, CheckCircle2, MessageSquare, AlertCircle, FileText,
-  UserPlus, Calendar, MoreVertical, Trash2, Check, ExternalLink
+  Bell, CheckCircle2, AlertCircle,
+  Trash2, Check, ExternalLink,
+  Info, CheckCircle, AlertTriangle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useApi } from '@/hooks/use-api';
+import { useAuth } from '@/hooks/use-auth';
 
-// Constantes e Mock
-type NotifType = 'MENTION' | 'SYSTEM' | 'EVENT' | 'DOC' | 'REMINDER';
+type NotificationType = 'INFO' | 'WARNING' | 'SUCCESS' | 'ERROR' | 'REMINDER';
 
 interface Notification {
   id: string;
-  type: NotifType;
+  type: NotificationType;
   title: string;
   message: string;
-  time: string;
+  channel: string;
   isRead: boolean;
+  createdAt: string;
+  sentAt?: string | null;
   link?: string;
   actor?: string;
+  data?: Record<string, unknown> | null;
 }
 
-const MOCK_NOTIFICATIONS: Notification[] = [
-  { id: '1', type: 'MENTION', title: 'Você foi mencionado', message: 'Carlos Mendes mencionou você na Demanda #45: "Precismos avaliar urgente essa rua esburacada."', time: 'Há 5 minutos', isRead: false, actor: 'CM', link: '/demandas/45' },
-  { id: '2', type: 'SYSTEM', title: 'Alerta de Faturamento', message: 'Fatura da assinatura Pro CampanhaPremium do mês atual processada com sucesso.', time: 'Há 1 hora', isRead: false },
-  { id: '3', type: 'EVENT', title: 'Mudança de Agenda', message: 'O Comício Central teve a data alterada para 12/04/2026 às 19:00.', time: 'Há 3 horas', isRead: false, actor: 'SA' },
-  { id: '4', type: 'DOC', title: 'Relatório Finalizado', message: 'Seu relatório de "Análise de Sentimento Público" foi gerado e está pronto para download.', time: 'Ontem', isRead: true },
-  { id: '5', type: 'USER_PLUS' as NotifType, title: 'Novo Membro', message: 'Ana Costa aceitou o convite e agora faz parte da Equipe Jurídica.', time: 'Ontem', isRead: true, actor: 'AC' },
-  { id: '6', type: 'REMINDER', title: 'Tarefa Atrasada', message: 'A tarefa "Confirmar local do comício" expirou hoje às 10:00.', time: 'Há 2 dias', isRead: true },
-];
-
-const ICONS: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
-  MENTION: { icon: MessageSquare, color: 'text-accent', bg: 'bg-accent/10' },
-  SYSTEM: { icon: AlertCircle, color: 'text-warning', bg: 'bg-warning/10' },
-  EVENT: { icon: Calendar, color: 'text-info', bg: 'bg-info/10' },
-  DOC: { icon: FileText, color: 'text-primary', bg: 'bg-primary/10' },
-  REMINDER: { icon: Bell, color: 'text-danger', bg: 'bg-danger/10' },
-  USER_PLUS: { icon: UserPlus, color: 'text-success', bg: 'bg-success/10' },
+const ICONS: Record<NotificationType, { icon: React.ElementType; color: string; bg: string }> = {
+  INFO: { icon: Info, color: 'text-accent', bg: 'bg-accent/10' },
+  WARNING: { icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10' },
+  SUCCESS: { icon: CheckCircle, color: 'text-success', bg: 'bg-success/10' },
+  ERROR: { icon: AlertCircle, color: 'text-danger', bg: 'bg-danger/10' },
+  REMINDER: { icon: Bell, color: 'text-info', bg: 'bg-info/10' },
 };
 
+function formatTimeAgo(dateString?: string | null) {
+  if (!dateString) return 'Agora';
+  const date = new Date(dateString);
+  const diff = Date.now() - date.getTime();
+  const minutes = Math.floor(diff / 1000 / 60);
+  const hours = Math.floor(diff / 1000 / 60 / 60);
+
+  if (minutes < 1) return 'Agora';
+  if (minutes < 60) return `Há ${minutes} min`;
+  if (hours < 24) return `Há ${hours} h`;
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
 export default function NotificacoesPage() {
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
-  const [activeTab, setActiveTab] = useState<'ALL' | 'UNREAD'>('ALL');
+  const router = useRouter();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { data, error, isLoading, mutate, request } = useApi<Notification[]>(!authLoading && isAuthenticated ? '/api/notifications' : null);
+  const notifications = data ?? [];
+  const [activeTab, setActiveTab] = React.useState<'ALL' | 'UNREAD'>('ALL');
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  const unreadCount = notifications.filter((notification) => !notification.isRead).length;
 
-  const filtered = notifications.filter(n => {
-    if (activeTab === 'UNREAD') return !n.isRead;
+  const loadNotifications = async () => {
+    await mutate();
+  };
+
+  const markAllAsRead = async () => {
+    const result = await request('/api/notifications', {
+      method: 'PATCH',
+      body: { action: 'markAllRead' },
+    });
+
+    if (result?.success) {
+      await loadNotifications();
+    }
+  };
+
+  const markAsRead = async (id: string) => {
+    const result = await request(`/api/notifications/${id}`, {
+      method: 'PATCH',
+      body: { action: 'markRead' },
+    });
+
+    if (result?.success) {
+      await loadNotifications();
+    }
+  };
+
+  const deleteNotification = async (id: string, event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    const result = await request(`/api/notifications/${id}`, {
+      method: 'DELETE',
+    });
+
+    if (result?.success) {
+      await loadNotifications();
+    }
+  };
+
+  const handleNotificationClick = async (notification: Notification) => {
+    if (!notification.isRead) {
+      await markAsRead(notification.id);
+    }
+    if (notification.link) {
+      router.push(notification.link);
+    }
+  };
+
+  const filteredNotifications = notifications.filter((notification) => {
+    if (activeTab === 'UNREAD') {
+      return !notification.isRead;
+    }
     return true;
   });
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-  };
-
-  const markAsRead = (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
-  };
-
-  const deleteNotification = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  };
-
   return (
     <div className="h-full flex flex-col pb-8">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
         <div>
           <h2 className="text-3xl font-extrabold font-headline text-primary tracking-tight">Notificações</h2>
-          <p className="text-text-secondary text-sm mt-1">Acompanhe atualizações, alertas e as novidades da equipe</p>
+          <p className="text-text-secondary text-sm mt-1">Acompanhe atualizações, alertas e as novidades da equipe.</p>
         </div>
 
         {unreadCount > 0 && (
@@ -83,14 +129,12 @@ export default function NotificacoesPage() {
       </div>
 
       <div className="bg-surface-card border border-border/50 rounded-2xl shadow-sm flex flex-col max-w-4xl w-full mx-auto overflow-hidden">
-
-        {/* Tabs */}
         <div className="flex border-b border-border/50">
           <button
             onClick={() => setActiveTab('ALL')}
             className={cn(
-              "flex-1 relative py-4 text-sm font-bold transition-colors outline-none",
-              activeTab === 'ALL' ? "text-primary" : "text-text-muted hover:text-text-secondary hover:bg-surface-hover/30"
+              'flex-1 relative py-4 text-sm font-bold transition-colors outline-none',
+              activeTab === 'ALL' ? 'text-primary' : 'text-text-muted hover:text-text-secondary hover:bg-surface-hover/30'
             )}
           >
             Todas as Notificações
@@ -99,8 +143,8 @@ export default function NotificacoesPage() {
           <button
             onClick={() => setActiveTab('UNREAD')}
             className={cn(
-              "flex-1 relative py-4 text-sm font-bold transition-colors outline-none flex items-center justify-center gap-2",
-              activeTab === 'UNREAD' ? "text-primary" : "text-text-muted hover:text-text-secondary hover:bg-surface-hover/30"
+              'flex-1 relative py-4 text-sm font-bold transition-colors outline-none flex items-center justify-center gap-2',
+              activeTab === 'UNREAD' ? 'text-primary' : 'text-text-muted hover:text-text-secondary hover:bg-surface-hover/30'
             )}
           >
             Não Lidas
@@ -111,81 +155,93 @@ export default function NotificacoesPage() {
           </button>
         </div>
 
-        {/* List */}
-        <div className="flex flex-col divide-y divide-border/30 max-h-[800px] overflow-y-auto custom-scrollbar">
-          {filtered.length === 0 ? (
+        <div className="flex flex-col divide-y divide-border/30 overflow-y-auto custom-scrollbar" style={{ maxHeight: 800 }}>
+          {isLoading ? (
+            <div className="py-16 flex flex-col items-center justify-center text-center">
+              <Bell className="w-12 h-12 text-border mb-4 opacity-50" />
+              <h3 className="font-bold text-text-primary mb-1">Carregando notificações...</h3>
+            </div>
+          ) : error ? (
+            <div className="py-16 flex flex-col items-center justify-center text-center">
+              <AlertCircle className="w-12 h-12 text-danger mb-4" />
+              <h3 className="font-bold text-text-primary mb-1">Erro ao carregar notificações</h3>
+              <p className="text-sm text-text-secondary">{error}</p>
+            </div>
+          ) : filteredNotifications.length === 0 ? (
             <div className="py-16 flex flex-col items-center justify-center text-center">
               <Bell className="w-12 h-12 text-border mb-4 opacity-50" />
               <h3 className="font-bold text-text-primary mb-1">Nenhuma notificação</h3>
               <p className="text-sm text-text-secondary">Você está atualizado. Não há novos alertas.</p>
             </div>
           ) : (
-            filtered.map(notif => {
-              const conf = ICONS[notif.type] || ICONS.SYSTEM;
+            filteredNotifications.map((notification) => {
+              const config = ICONS[notification.type] || ICONS.INFO;
               return (
                 <div
-                  key={notif.id}
-                  onClick={() => !notif.isRead && markAsRead(notif.id)}
+                  key={notification.id}
+                  onClick={() => handleNotificationClick(notification)}
                   className={cn(
-                    "p-5 flex items-start gap-4 transition-colors relative group",
-                    notif.isRead ? "bg-transparent opacity-75 hover:opacity-100" : "bg-primary/[0.02] hover:bg-primary/[0.04]",
-                    notif.link && "cursor-pointer"
+                    'p-5 flex items-start gap-4 transition-colors relative group',
+                    notification.isRead ? 'bg-transparent opacity-75 hover:opacity-100' : 'bg-primary/2 hover:bg-primary/4',
+                    notification.link && 'cursor-pointer'
                   )}
                 >
-                  {/* Unread dot */}
-                  {!notif.isRead && (
+                  {!notification.isRead && (
                     <div className="absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-primary" />
                   )}
 
-                  {/* Icon or Avatar */}
                   <div className="shrink-0 relative mt-1">
-                    {notif.actor ? (
+                    {notification.actor ? (
                       <div className="w-10 h-10 rounded-full bg-surface-muted flex items-center justify-center text-xs font-bold text-text-secondary border border-border/50">
-                        {notif.actor}
+                        {notification.actor}
                       </div>
                     ) : (
-                      <div className={cn("w-10 h-10 rounded-full flex items-center justify-center", conf.bg, conf.color)}>
-                        <conf.icon className="w-5 h-5" />
+                      <div className={cn('w-10 h-10 rounded-full flex items-center justify-center', config.bg, config.color)}>
+                        <config.icon className="w-5 h-5" />
                       </div>
                     )}
-                    {/* Tiny badge if avatar present */}
-                    {notif.actor && (
-                      <div className={cn("absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-surface-card flex items-center justify-center", conf.bg, conf.color)}>
-                        <conf.icon className="w-2.5 h-2.5" />
+                    {notification.actor && (
+                      <div className={cn('absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-2 border-surface-card flex items-center justify-center', config.bg, config.color)}>
+                        <config.icon className="w-2.5 h-2.5" />
                       </div>
                     )}
                   </div>
 
-                  {/* Content */}
                   <div className="flex-1 min-w-0 pr-12">
                     <div className="flex items-start justify-between gap-2 mb-1">
-                      <h4 className={cn("font-bold text-sm", notif.isRead ? "text-text-primary" : "text-primary")}>
-                        {notif.title}
+                      <h4 className={cn('font-bold text-sm', notification.isRead ? 'text-text-primary' : 'text-primary')}>
+                        {notification.title}
                       </h4>
-                      <span className="text-[10px] text-text-muted font-medium whitespace-nowrap pt-0.5">{notif.time}</span>
+                      <span className="text-[10px] text-text-muted font-medium whitespace-nowrap pt-0.5">
+                        {formatTimeAgo(notification.sentAt ?? notification.createdAt)}
+                      </span>
                     </div>
-                    <p className="text-sm text-text-secondary leading-relaxed mb-2">{notif.message}</p>
+                    <p className="text-sm text-text-secondary leading-relaxed mb-2">{notification.message}</p>
 
-                    {notif.link && (
+                    {notification.link && (
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold text-accent hover:underline">
                         Acessar link <ExternalLink className="w-3 h-3" />
                       </span>
                     )}
                   </div>
 
-                  {/* Actions hover */}
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {!notif.isRead && (
+                    {!notification.isRead && (
                       <button
-                        onClick={(e) => { e.stopPropagation(); markAsRead(notif.id); }}
-                        className="p-1.5 rounded-lg text-text-muted hover:text-success hover:bg-success/10 transition-colors tooltip" title="Marcar como lido"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void markAsRead(notification.id);
+                        }}
+                        className="p-1.5 rounded-lg text-text-muted hover:text-success hover:bg-success/10 transition-colors tooltip"
+                        title="Marcar como lido"
                       >
                         <Check className="w-4 h-4" />
                       </button>
                     )}
                     <button
-                      onClick={(e) => deleteNotification(notif.id, e)}
-                      className="p-1.5 rounded-lg text-text-muted hover:text-danger hover:bg-danger/10 transition-colors tooltip" title="Remover"
+                      onClick={(event) => void deleteNotification(notification.id, event)}
+                      className="p-1.5 rounded-lg text-text-muted hover:text-danger hover:bg-danger/10 transition-colors tooltip"
+                      title="Remover"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

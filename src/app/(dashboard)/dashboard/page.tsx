@@ -1,13 +1,14 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { 
-  Zap, Calendar, Star, AlertTriangle, ChevronRight, 
+  Zap, Calendar, Star, AlertTriangle, 
   UserPlus, CheckCircle2, MessageSquare, MoreVertical,
-  TrendingUp, TrendingDown, ArrowUpRight, Users2, Target
+  Target
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
+import { useApi } from '@/hooks/use-api';
 
 const stats = [
   { label: 'Ações do Mês', value: '142', trend: '+12%', trendType: 'positive', icon: Zap, color: 'text-accent bg-accent/10' },
@@ -53,8 +54,94 @@ const demandProgress = [
   { label: 'Segurança', value: 31, color: 'bg-warning' },
 ];
 
+type RecentAction = {
+  id: string;
+  title: string;
+  description?: string | null;
+  startDate: string;
+  location?: string | null;
+  responsible?: { name?: string | null } | null;
+};
+
+type DashboardTask = {
+  id: string;
+  title: string;
+  dueDate?: string | null;
+  status: string;
+  assignee?: { name?: string | null } | null;
+  createdAt: string;
+};
+
+function formatActivityTime(dateString: string) {
+  const date = new Date(dateString);
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatTaskTime(dueDate?: string | null) {
+  if (!dueDate) return 'Sem prazo definido';
+
+  const date = new Date(dueDate);
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfDue = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((startOfDue.getTime() - startOfToday.getTime()) / 86400000);
+  const formattedTime = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  if (diffDays === 0) return `Hoje, ${formattedTime}`;
+  if (diffDays === 1) return `Amanhã, ${formattedTime}`;
+  if (diffDays === -1) return `Atrasado • Ontem`;
+
+  return `${date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} • ${formattedTime}`;
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
+
+  const { data: actionsResponse } = useApi<{ items: RecentAction[]; pagination: { page: number; limit: number; total: number } }>(
+    user ? '/api/actions?page=1&limit=4' : null
+  );
+
+  const { data: tasksResponse } = useApi<{ items: DashboardTask[]; pagination: { page: number; limit: number; total: number } }>(
+    user ? '/api/tasks?page=1&limit=8&status=TODO&sortBy=dueDate&order=asc' : null
+  );
+
+  const recentActivityItems = useMemo(() => {
+    if (!actionsResponse) return recentActivity;
+    if (actionsResponse.items.length === 0) return [];
+
+    return actionsResponse.items.map((item, index) => ({
+      icon: Target,
+      color: index === 0 ? 'bg-accent' : 'bg-info',
+      title: item.title,
+      desc: item.location || item.description || item.responsible?.name || 'Atividade política recente',
+      time: formatActivityTime(item.startDate),
+    }));
+  }, [actionsResponse]);
+
+  const upcomingTaskItems = useMemo(() => {
+    if (!tasksResponse) return upcomingTasks;
+    if (tasksResponse.items.length === 0) return [];
+
+    return tasksResponse.items
+      .slice()
+      .sort((a, b) => {
+        const aDue = a.dueDate ? new Date(a.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+        const bDue = b.dueDate ? new Date(b.dueDate).getTime() : Number.MAX_SAFE_INTEGER;
+        return aDue - bDue || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      })
+      .slice(0, 4)
+      .map((item) => ({
+        title: item.title,
+        time: formatTaskTime(item.dueDate),
+        color: item.dueDate && new Date(item.dueDate) < new Date() ? 'bg-danger' : 'bg-accent',
+        isLate: item.dueDate ? new Date(item.dueDate) < new Date() : false,
+      }));
+  }, [tasksResponse]);
 
   return (
     <div>
@@ -204,18 +291,22 @@ export default function DashboardPage() {
             <h4 className="font-headline font-bold text-lg text-primary">Atividades Recentes</h4>
             <button className="text-xs text-accent font-bold hover:underline">Ver tudo</button>
           </div>
-          <div className="space-y-5 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-surface-hover">
-            {recentActivity.map((item, i) => (
-              <div key={i} className="flex gap-4 relative">
-                <div className={cn("w-6 h-6 rounded-full ring-4 ring-surface-card z-10 flex items-center justify-center shrink-0", item.color)}>
-                  <item.icon className="w-3 h-3 text-white" />
+          <div className="space-y-5 relative before:absolute before:left-2.75 before:top-2 before:bottom-2 before:w-0.5 before:bg-surface-hover">
+            {recentActivityItems.length > 0 ? (
+              recentActivityItems.map((item, i) => (
+                <div key={i} className="flex gap-4 relative">
+                  <div className={cn("w-6 h-6 rounded-full ring-4 ring-surface-card z-10 flex items-center justify-center shrink-0", item.color)}>
+                    <item.icon className="w-3 h-3 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-text-primary truncate">{item.title}</p>
+                    <p className="text-[10px] text-text-muted">{item.desc} • {item.time}</p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-text-primary truncate">{item.title}</p>
-                  <p className="text-[10px] text-text-muted">{item.desc} • {item.time}</p>
-                </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <div className="text-xs text-text-muted">Nenhuma atividade recente encontrada.</div>
+            )}
           </div>
         </div>
 
@@ -223,23 +314,27 @@ export default function DashboardPage() {
         <div className="col-span-12 lg:col-span-4 card p-6">
           <h4 className="font-headline font-bold text-lg text-primary mb-6">Próximas Tarefas</h4>
           <div className="space-y-1">
-            {upcomingTasks.map((item, i) => (
-              <div key={i} className="flex items-center gap-3 p-3 rounded-xl hover:bg-surface-hover transition-colors group">
-                <div className={cn("w-1.5 h-10 rounded-full shrink-0", item.color)} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold truncate text-text-primary">{item.title}</p>
-                  <p className={cn(
-                    "text-[10px]",
-                    item.isLate ? "text-danger font-bold" : "text-text-muted"
-                  )}>
-                    {item.time}
-                  </p>
+            {upcomingTaskItems.length > 0 ? (
+              upcomingTaskItems.map((item, i) => (
+                <div key={i} className="flex items-center gap-3 p-3 rounded-xl hover:bg-surface-hover transition-colors group">
+                  <div className={cn("w-1.5 h-10 rounded-full shrink-0", item.color)} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold truncate text-text-primary">{item.title}</p>
+                    <p className={cn(
+                      "text-[10px]",
+                      item.isLate ? "text-danger font-bold" : "text-text-muted"
+                    )}>
+                      {item.time}
+                    </p>
+                  </div>
+                  <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-surface-muted rounded">
+                    <MoreVertical className="w-4 h-4 text-text-muted" />
+                  </button>
                 </div>
-                <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-surface-muted rounded">
-                  <MoreVertical className="w-4 h-4 text-text-muted" />
-                </button>
-              </div>
-            ))}
+              ))
+            ) : (
+              <div className="p-3 text-xs text-text-muted">Nenhuma tarefa próxima encontrada.</div>
+            )}
           </div>
         </div>
       </div>

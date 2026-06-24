@@ -23,6 +23,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string, confirmPassword: string, name: string, tenantName: string, phone?: string) => Promise<void>;
   logout: () => Promise<void>;
   hasRole: (role: string) => boolean;
 }
@@ -85,6 +86,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const signup = useCallback(async (email: string, password: string, confirmPassword: string, name: string, tenantName: string, phone?: string) => {
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, confirmPassword, name, tenantName, phone }),
+      });
+
+      const data = await res.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Erro ao criar conta');
+      }
+
+      const { user: userData, accessToken: token, refreshToken } = data.data;
+      
+      setUser(userData);
+      setAccessToken(token);
+      
+      localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, token);
+      localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData));
+    } catch (error) {
+      throw error;
+    }
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       if (accessToken) {
@@ -120,6 +148,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLoading,
       isAuthenticated: !!user,
       login,
+      signup,
       logout,
       hasRole,
     }}>

@@ -220,9 +220,9 @@ export default function LoginPage() {
           <div className="mt-10 flex flex-col items-center gap-4">
             <p className="text-text-muted text-sm">Ainda não possui acesso?</p>
             <div className="flex flex-wrap justify-center gap-6">
-              <a className="inline-flex items-center gap-2 text-primary font-bold text-sm hover:text-accent transition-colors" href="#">
+              <a className="inline-flex items-center gap-2 text-primary font-bold text-sm hover:text-accent transition-colors" href="/signup">
                 <UserPlus className="w-4 h-4" />
-                Solicitar Acesso
+                Criar Conta
               </a>
               <div className="w-px h-4 bg-border hidden sm:block" />
               <a className="inline-flex items-center gap-2 text-primary font-bold text-sm hover:text-accent transition-colors" href="#">

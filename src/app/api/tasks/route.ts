@@ -11,6 +11,8 @@ async function handleGet(request: NextRequest, auth: AccessTokenPayload) {
   const status = searchParams.get('status') || '';
   const priority = searchParams.get('priority') || '';
   const assigneeId = searchParams.get('assigneeId') || '';
+  const sortBy = searchParams.get('sortBy') || '';
+  const order = searchParams.get('order') === 'desc' ? 'desc' as const : 'asc' as const;
 
   const where = {
     ...tenantWhere(auth.tenantId),
@@ -20,6 +22,12 @@ async function handleGet(request: NextRequest, auth: AccessTokenPayload) {
     ...(assigneeId ? { assigneeId } : {}),
   };
 
+  const orderBy = [] as Array<Record<string, 'asc' | 'desc'>>;
+  if (sortBy === 'dueDate') {
+    orderBy.push({ dueDate: order });
+  }
+  orderBy.push({ position: 'asc' }, { createdAt: 'desc' });
+
   const [tasks, total] = await Promise.all([
     prisma.task.findMany({
       where,
@@ -27,7 +35,7 @@ async function handleGet(request: NextRequest, auth: AccessTokenPayload) {
         assignee: { select: { id: true, name: true, avatar: true } },
         createdBy: { select: { id: true, name: true } },
       },
-      orderBy: [{ position: 'asc' }, { createdAt: 'desc' }],
+      orderBy,
       skip,
       take: limit,
     }),

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { randomBytes } from 'crypto';
 import prisma from './prisma';
+import { ROLE_PERMISSIONS } from './permissions';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'politicflow-dev-secret-change-in-production';
 const JWT_EXPIRES_IN = '15m';
@@ -84,7 +85,7 @@ export function getTokenFromRequest(req: Request): string | null {
 
 export async function generateTokens(user: { id: string; email: string; tenantId: string; userRoles: { role: { slug: string } }[] }, tenant: { id: string }) {
   // Buscar permissões do usuário
-  const permissions = await getPermissionsForUser(user.id, tenant.id);
+  const permissions = await getPermissionsForUser(user.id);
 
   // Access token (15 minutos)
   const accessToken = jwt.sign(
@@ -130,31 +131,57 @@ export async function generateTokens(user: { id: string; email: string; tenantId
   return { accessToken, refreshToken };
 }
 
-export async function getPermissionsForUser(userId: string, tenantId: string): Promise<string[]> {
+export async function getPermissionsForUser(userId: string): Promise<string[]> {
   // Buscar papéis do usuário
   const userRoles = await prisma.userRole.findMany({
     where: { userId },
     include: { role: true }
   });
 
+  console.log(`[DEBUG] User ${userId} has ${userRoles.length} roles`);
+
   // Coletar todas as permissões
   const allPermissions = new Set<string>();
 
   for (const userRole of userRoles) {
+    console.log(`[DEBUG] Getting permissions for role: ${userRole.role.slug} (${userRole.roleId})`);
     const rolePermissions = await getPermissionsForRole(userRole.roleId);
+    console.log(`[DEBUG] Role permissions:`, rolePermissions);
     rolePermissions.forEach(perm => allPermissions.add(perm));
   }
 
+  console.log(`[DEBUG] Final permissions for user:`, Array.from(allPermissions));
   return Array.from(allPermissions);
 }
 
 async function getPermissionsForRole(roleId: string): Promise<string[]> {
+  // First, try to get permissions from database
   const rolePermissions = await prisma.rolePermission.findMany({
     where: { roleId },
     include: { permission: true }
   });
 
-  return rolePermissions.map(rp => `${rp.permission.module}:${rp.permission.action}`);
+  if (rolePermissions.length > 0) {
+    console.log(`[DEBUG] Found ${rolePermissions.length} permissions in DB for role ${roleId}`);
+    return rolePermissions.map(rp => `${rp.permission.module}:${rp.permission.action}`);
+  }
+
+  // Fallback: Get permissions from the role name in ROLE_PERMISSIONS config
+  const role = await prisma.role.findUnique({
+    where: { id: roleId },
+  });
+
+  if (!role) {
+    console.log(`[DEBUG] Role not found for id ${roleId}`);
+    return [];
+  }
+
+  // Use ROLE_PERMISSIONS config as fallback
+  const configPermissions = ROLE_PERMISSIONS[role.slug];
+  console.log(`[DEBUG] Looking up role slug '${role.slug}' in ROLE_PERMISSIONS`);
+  console.log(`[DEBUG] Found config permissions:`, configPermissions);
+
+  return configPermissions || [];
 }
 
 export async function generateRefreshToken(userId: string): Promise<string> {
