@@ -1,346 +1,308 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Check, Calendar, MapPin, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Loader2, X, AlertCircle, MapPin, Users, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useApi } from '@/hooks/use-api';
+
+const TYPE_LABELS: Record<string, { label: string; color: string; bg: string }> = {
+  PUBLIC_EVENT:      { label: 'Evento Público',    color: 'bg-accent',   bg: 'bg-accent/10 text-accent'   },
+  INTERNAL_MEETING:  { label: 'Reunião Interna',   color: 'bg-primary',  bg: 'bg-primary/10 text-primary' },
+  INTERVIEW:         { label: 'Entrevista',        color: 'bg-info',     bg: 'bg-info/10 text-info'       },
+  VISIT:             { label: 'Visita',            color: 'bg-success',  bg: 'bg-success/10 text-success' },
+  RECORDING:         { label: 'Gravação',          color: 'bg-accent',   bg: 'bg-accent/10 text-accent'   },
+  TRAVEL:            { label: 'Viagem',            color: 'bg-warning',  bg: 'bg-warning/10 text-warning' },
+  OTHER:             { label: 'Outro',             color: 'bg-text-muted', bg: 'bg-surface-muted text-text-secondary' },
+};
+
+const STATUS_CONFIG: Record<string, { label: string; class: string }> = {
+  SCHEDULED:   { label: 'Agendado',    class: 'badge-info'    },
+  CONFIRMED:   { label: 'Confirmado',  class: 'badge-success' },
+  IN_PROGRESS: { label: 'Em andamento',class: 'badge-warning' },
+  COMPLETED:   { label: 'Concluído',   class: 'badge-neutral' },
+  CANCELLED:   { label: 'Cancelado',   class: 'badge-danger'  },
+  POSTPONED:   { label: 'Adiado',      class: 'badge-accent'  },
+};
+
+const inputCls = 'w-full px-4 py-2.5 bg-surface-hover rounded-lg text-sm outline-none border border-transparent focus:border-accent/30 focus:ring-2 focus:ring-accent/20';
+const labelCls = 'block text-xs font-bold uppercase tracking-wider text-text-secondary mb-1.5';
+
+interface Schedule {
+  id: string; title: string; type: string; status: string;
+  startDate: string; endDate?: string; location?: string;
+  responsibleName?: string; description?: string; isPublic: boolean;
+}
+
+const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
 export default function AgendaPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<'Mês' | 'Semana' | 'Dia'>('Mês');
+  const [showForm, setShowForm] = useState(false);
+  const [selected, setSelected] = useState<Schedule | null>(null);
+  const [form, setForm] = useState({ title: '', type: 'PUBLIC_EVENT', startDate: '', endDate: '', location: '', responsibleName: '', description: '' });
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
 
-  const getDaysInMonth = (year: number, month: number) => {
-    return new Date(year, month + 1, 0).getDate();
-  };
+  const year  = currentDate.getFullYear();
+  const month = currentDate.getMonth();
 
-  const getFirstDayOfMonth = (year: number, month: number) => {
-    return new Date(year, month, 1).getDay();
-  };
+  // Fetch schedules for current month range
+  const startOfMonth = new Date(year, month, 1).toISOString();
+  const endOfMonth   = new Date(year, month + 1, 0, 23, 59, 59).toISOString();
 
-  const handlePrevMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
-  };
+  const { data: response, isLoading, error, mutate, request } = useApi<{ items: Schedule[] }>(
+    `/api/agenda?startDate=${startOfMonth}&endDate=${endOfMonth}&limit=100`
+  );
+  const schedules = response?.items ?? [];
 
-  const handleNextMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
-  };
+  // Calendar grid
+  const daysInMonth  = new Date(year, month + 1, 0).getDate();
+  const firstDayWeek = new Date(year, month, 1).getDay();
+  const prevDays     = new Date(year, month, 0).getDate();
+  const totalCells   = firstDayWeek + daysInMonth > 35 ? 42 : 35;
 
-  const monthNames = [
-    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-  ];
-
-  const currentYear = currentDate.getFullYear();
-  const currentMonth = currentDate.getMonth();
-  const daysInMonth = getDaysInMonth(currentYear, currentMonth);
-  const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
-
-  // Pad the start with days from previous month
-  const prevMonthDays = getDaysInMonth(currentYear, currentMonth - 1);
   const days = [];
-
-  for (let i = firstDay - 1; i >= 0; i--) {
-    days.push({ day: prevMonthDays - i, isCurrentMonth: false });
-  }
-
-  for (let i = 1; i <= daysInMonth; i++) {
-    days.push({ day: i, isCurrentMonth: true });
-  }
-
-  // Pad the end with days from next month
-  // If we have more than 35 days (e.g., month starts on Saturday), we need 42 cells
-  const totalCells = days.length > 35 ? 42 : 35;
-  const endPadding = totalCells - days.length;
-
-  for (let i = 1; i <= endPadding; i++) {
-    days.push({ day: i, isCurrentMonth: false });
-  }
+  for (let i = firstDayWeek - 1; i >= 0; i--)  days.push({ day: prevDays - i, current: false });
+  for (let i = 1; i <= daysInMonth; i++)         days.push({ day: i, current: true });
+  for (let i = 1; days.length < totalCells; i++) days.push({ day: i, current: false });
 
   const today = new Date();
-  const isCurrentMonthView = today.getFullYear() === currentYear && today.getMonth() === currentMonth;
+
+  const eventsForDay = (day: number) =>
+    schedules.filter(s => {
+      const d = new Date(s.startDate);
+      return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
+    });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+    setForm(p => ({ ...p, [e.target.name]: e.target.value }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title || !form.startDate) { setFormError('Título e data de início são obrigatórios.'); return; }
+    setSubmitting(true); setFormError('');
+    try {
+      const body = {
+        title: form.title,
+        type: form.type,
+        startDate: new Date(form.startDate).toISOString(),
+        endDate: form.endDate ? new Date(form.endDate).toISOString() : undefined,
+        location: form.location || undefined,
+        responsibleName: form.responsibleName || undefined,
+        description: form.description || undefined,
+      };
+      const res = await request('/api/agenda', { method: 'POST', body });
+      if (!res?.success) throw new Error(res?.error || 'Erro ao salvar');
+      setShowForm(false);
+      setForm({ title: '', type: 'PUBLIC_EVENT', startDate: '', endDate: '', location: '', responsibleName: '', description: '' });
+      mutate();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Erro ao salvar');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
-    <div className="h-full px-4 sm:px-0">
-      <div className="mb-8">
-        <nav className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-text-muted mb-2">
-          <span>Pro Campanha</span>
-          <ChevronRight className="w-3 h-3" />
-          <span className="text-accent font-bold">Agenda</span>
-        </nav>
-        <div className="flex flex-col md:flex-row items-start md:items-end justify-between gap-4">
-          <div>
-            <h2 className="font-headline font-extrabold text-3xl md:text-4xl text-text-primary tracking-tight">Agenda do Candidato</h2>
-            <p className="text-text-secondary font-body mt-1 opacity-70">Planejamento estratégico e compromissos institucionais.</p>
+    <div>
+      {/* Header */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
+        <div>
+          <h2 className="font-headline font-extrabold text-2xl md:text-3xl text-primary tracking-tight">Agenda</h2>
+          <p className="text-text-secondary text-sm mt-1">Compromissos e eventos do candidato</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 bg-surface-hover rounded-xl p-1 border border-border/50">
+            <button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} className="p-2 hover:bg-surface-card rounded-lg transition-colors">
+              <ChevronLeft className="w-4 h-4 text-text-secondary" />
+            </button>
+            <span className="px-3 font-bold text-sm text-text-primary min-w-[140px] text-center">{MONTH_NAMES[month]} {year}</span>
+            <button onClick={() => setCurrentDate(new Date(year, month + 1, 1))} className="p-2 hover:bg-surface-card rounded-lg transition-colors">
+              <ChevronRight className="w-4 h-4 text-text-secondary" />
+            </button>
           </div>
-          <div className="flex items-center gap-4 bg-surface-hover p-1.5 rounded-xl border border-border/50">
-            <div className="flex border-r border-border pr-3 mr-1">
-              <button onClick={handlePrevMonth} className="p-2 hover:bg-surface-muted rounded-lg transition-colors"><ChevronLeft className="w-4 h-4 text-text-secondary" /></button>
-              <button className="px-4 font-bold text-text-primary text-sm min-w-[140px]">{monthNames[currentMonth]} {currentYear}</button>
-              <button onClick={handleNextMonth} className="p-2 hover:bg-surface-muted rounded-lg transition-colors"><ChevronRight className="w-4 h-4 text-text-secondary" /></button>
-            </div>
-            <div className="flex gap-1">
-              {(['Mês', 'Semana', 'Dia'] as const).map(mode => (
-                <button
-                  key={mode}
-                  onClick={() => setViewMode(mode)}
-                  className={cn(
-                    "px-4 py-2 rounded-lg text-xs font-bold transition-all",
-                    viewMode === mode
-                      ? "bg-surface-card shadow-sm text-accent ring-1 ring-border/50"
-                      : "hover:bg-surface-muted text-text-secondary"
-                  )}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
-          </div>
+          <button onClick={() => setShowForm(true)} className="gradient-accent text-white font-bold text-sm px-5 py-2.5 rounded-xl shadow shadow-accent/20 hover:shadow-lg transition-all flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Novo Evento
+          </button>
         </div>
       </div>
 
-      <div className="flex flex-col xl:flex-row gap-8 items-stretch w-full">
-        {/* Left Sidebar - Hidden in Weekly/Daily views for more space */}
-        {viewMode === 'Mês' && (
-          <aside className="w-full xl:w-72 flex-shrink-0 space-y-8 animate-slide-in">
-            <div className="bg-surface-card p-6 rounded-2xl shadow-sm border border-border/60">
-              <div className="flex justify-between items-center mb-6">
-                <span className="font-bold text-sm text-text-primary">{monthNames[currentMonth]} {currentYear}</span>
-                <div className="flex gap-2 text-text-secondary">
-                  <ChevronLeft className="w-4 h-4 cursor-pointer hover:text-accent transition-colors" onClick={handlePrevMonth} />
-                  <ChevronRight className="w-4 h-4 cursor-pointer hover:text-accent transition-colors" onClick={handleNextMonth} />
-                </div>
-              </div>
-              <div className="grid grid-cols-7 text-center text-[10px] text-text-muted font-bold mb-4">
-                {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, index) => <span key={index}>{d}</span>)}
-              </div>
-              <div className="grid grid-cols-7 gap-y-3 text-center text-xs">
-                {days.map((d, i) => {
-                  const isToday = isCurrentMonthView && d.isCurrentMonth && d.day === today.getDate();
-                  return (
-                    <span key={i} className={cn(
-                      "w-7 h-7 flex items-center justify-center rounded-xl mx-auto cursor-pointer transition-all",
-                      !d.isCurrentMonth ? "text-text-muted/30" : "font-medium hover:bg-surface-hover text-text-primary",
-                      isToday && "bg-accent text-white font-bold shadow-md shadow-accent/20"
-                    )}>
-                      {d.day}
-                    </span>
-                  )
-                })}
-              </div>
-            </div>
+      {error && (
+        <div className="bg-danger/10 border border-danger/30 text-danger px-4 py-3 rounded-xl mb-4 flex items-center gap-2">
+          <AlertCircle className="w-5 h-5" /><span className="text-sm">{error}</span>
+        </div>
+      )}
 
-            <div className="bg-surface-hover/50 p-6 rounded-2xl space-y-4 border border-border/40">
-              <h4 className="font-bold text-[10px] uppercase tracking-widest text-text-muted">Categorias</h4>
-              <ul className="space-y-3">
-                {[
-                  { label: 'Eventos Institucionais', color: 'bg-primary', checked: true },
-                  { label: 'Atos de Campanha', color: 'bg-secondary', checked: true },
-                  { label: 'Viagens e Logística', color: 'bg-text-muted', checked: false },
-                  { label: 'Gravações e Mídia', color: 'bg-text-muted', checked: false },
-                ].map((cat, i) => (
-                  <li key={i} className="flex items-center gap-3 cursor-pointer group">
-                    <div className={cn(
-                      "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                      cat.checked ? `${cat.color} border-transparent` : "border-border bg-surface-card"
-                    )}>
-                      {cat.checked && <Check className="w-3 h-3 text-white stroke-[4px]" />}
-                    </div>
-                    <span className={cn("text-xs font-semibold transition-colors", cat.checked ? "text-text-primary" : "text-text-muted")}>
-                      {cat.label}
-                    </span>
-                    {cat.checked && <span className={cn("ml-auto w-1.5 h-1.5 rounded-full", cat.color)} />}
-                  </li>
-                ))}
-              </ul>
-            </div>
+      {/* Calendar */}
+      <div className="card overflow-hidden">
+        {/* Day headers */}
+        <div className="grid grid-cols-7 border-b border-border bg-surface-hover/30">
+          {['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d => (
+            <div key={d} className="py-3 text-center font-bold text-[10px] uppercase text-text-muted tracking-wider">{d}</div>
+          ))}
+        </div>
 
-            <div className="relative overflow-hidden rounded-2xl gradient-primary text-white p-6 shadow-xl">
-              <div className="absolute -right-4 -top-4 opacity-10">
-                <Calendar className="w-32 h-32" />
-              </div>
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-60">Próximo Compromisso</span>
-              <h5 className="text-xl font-headline font-bold mt-2">Comício Central</h5>
-              <p className="text-xs mt-1 opacity-80">Praça da Sé • 19:00</p>
-              <div className="mt-6 flex items-center gap-2">
-                <div className="flex -space-x-2">
-                  {[1, 2].map(i => (
-                    <img key={i} className="w-6 h-6 rounded-full border border-white/20 object-cover" src={`https://i.pravatar.cc/100?img=${i + 10}`} alt="avatar" />
-                  ))}
+        {isLoading ? (
+          <div className="h-96 flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-accent" /></div>
+        ) : (
+          <div className={cn('grid grid-cols-7 divide-x divide-y divide-border', days.length > 35 ? 'grid-rows-6' : 'grid-rows-5')}>
+            {days.map((d, i) => {
+              const isToday = d.current && today.getFullYear() === year && today.getMonth() === month && today.getDate() === d.day;
+              const events  = d.current ? eventsForDay(d.day) : [];
+              return (
+                <div key={i} className={cn('p-1.5 flex flex-col min-h-[100px] lg:min-h-[120px]', !d.current && 'bg-surface-muted/10 opacity-40')}>
+                  <span className={cn('text-xs font-bold mb-1 w-7 h-7 flex items-center justify-center rounded-lg self-end transition-colors',
+                    isToday ? 'bg-accent text-white shadow-md shadow-accent/20' : 'text-text-primary'
+                  )}>{d.day}</span>
+                  <div className="space-y-0.5">
+                    {events.slice(0, 3).map(ev => {
+                      const cfg = TYPE_LABELS[ev.type] ?? TYPE_LABELS.OTHER;
+                      return (
+                        <button key={ev.id} onClick={() => setSelected(ev)}
+                          className={cn('w-full text-left border-l-2 px-1.5 py-0.5 rounded-r text-[10px] font-bold truncate hover:opacity-80 transition-opacity', cfg.bg,
+                            `border-l-[${cfg.color}]`
+                          )}>
+                          {ev.title}
+                        </button>
+                      );
+                    })}
+                    {events.length > 3 && (
+                      <span className="text-[9px] text-text-muted font-medium px-1">+{events.length - 3} mais</span>
+                    )}
+                  </div>
                 </div>
-                <span className="text-[10px] font-medium opacity-70">+4 assessores</span>
-              </div>
-            </div>
-          </aside>
+              );
+            })}
+          </div>
         )}
+      </div>
 
-        {/* Calendar Grid & Other Views */}
-        <div className="flex-1 bg-surface-card rounded-2xl overflow-hidden shadow-sm border border-border/80 w-full">
-
-          {viewMode === 'Mês' && (
-            <>
-              <div className="grid grid-cols-7 border-b border-border bg-surface-hover/30 text-center">
-                {['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'].map((d, index) => (
-                  <div key={index} className="py-4 font-bold text-[10px] uppercase text-text-muted tracking-tighter sm:tracking-normal">{d}</div>
-                ))}
-              </div>
-              <div className={cn(
-                "grid grid-cols-7 divide-x divide-y divide-border min-h-[700px]",
-                days.length > 35 ? "grid-rows-6" : "grid-rows-5"
-              )}>
-                {days.map((d, i) => {
-                  const isToday = isCurrentMonthView && d.isCurrentMonth && d.day === today.getDate();
-
-                  // Simple mock events linked correctly to specific dates
-                  const hasMockEvent1 = isCurrentMonthView && d.isCurrentMonth && d.day === 1;
-                  const hasMockEvent4 = isCurrentMonthView && d.isCurrentMonth && d.day === 4;
-                  const hasMockEvent12 = isCurrentMonthView && d.isCurrentMonth && d.day === 12;
-                  const hasMockEvent20 = isCurrentMonthView && d.isCurrentMonth && d.day === 20;
-
-                  return (
-                    <div key={i} className={cn(
-                      "p-1.5 flex flex-col items-end transition-colors min-h-[120px] lg:min-h-0",
-                      !d.isCurrentMonth && "bg-surface-muted/10 opacity-30"
-                    )}>
-                      <span className={cn(
-                        "text-xs font-bold mb-2 w-7 h-7 flex items-center justify-center rounded-xl transition-colors",
-                        isToday ? "bg-accent text-white shadow-md shadow-accent/20" : "text-text-primary"
-                      )}>
-                        {d.day}
-                      </span>
-
-                      {hasMockEvent1 && (
-                        <div className="w-full bg-primary/10 border-l-2 border-primary p-2 rounded-r mb-1">
-                          <p className="text-[10px] font-bold text-text-primary leading-tight truncate">Almoço Federativo</p>
-                        </div>
-                      )}
-                      {hasMockEvent4 && (
-                        <>
-                          <div className="w-full bg-secondary/10 border-l-2 border-secondary p-2 rounded-r mb-1">
-                            <p className="text-[10px] font-bold text-text-primary leading-tight truncate">Caminhada Bairro Azul</p>
-                          </div>
-                          <div className="w-full bg-primary/10 border-l-2 border-primary p-2 rounded-r">
-                            <p className="text-[10px] font-bold text-text-primary leading-tight truncate">Entrevista TV</p>
-                          </div>
-                        </>
-                      )}
-                      {hasMockEvent12 && (
-                        <div className="w-full bg-secondary text-white p-2 rounded-xl shadow-sm mb-1">
-                          <p className="text-[10px] font-bold leading-tight">Grande Comício Sul</p>
-                          <p className="text-[8px] opacity-80">18:30 - 22:00</p>
-                        </div>
-                      )}
-                      {hasMockEvent20 && (
-                        <div className="w-full bg-primary text-white p-2 rounded-xl shadow-sm">
-                          <p className="text-[10px] font-bold leading-tight">Debate Televisivo</p>
-                          <p className="text-[8px] opacity-80">21:00 - 23:30</p>
-                        </div>
-                      )}
+      {/* Upcoming list */}
+      {schedules.length > 0 && (
+        <div className="mt-6 card p-6">
+          <h3 className="font-bold text-base text-primary mb-4">Próximos eventos do mês</h3>
+          <div className="space-y-3">
+            {schedules
+              .filter(s => new Date(s.startDate) >= new Date())
+              .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
+              .slice(0, 5)
+              .map(s => {
+                const cfg = TYPE_LABELS[s.type] ?? TYPE_LABELS.OTHER;
+                const status = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.SCHEDULED;
+                const date = new Date(s.startDate);
+                return (
+                  <div key={s.id} onClick={() => setSelected(s)} className="flex items-center gap-4 p-3 rounded-xl hover:bg-surface-hover transition-colors cursor-pointer group">
+                    <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0', cfg.color)}>
+                      {date.getDate()}<br /><span className="text-[8px]">{MONTH_NAMES[date.getMonth()].slice(0,3)}</span>
                     </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-
-          {viewMode === 'Semana' && (
-            <div className="flex flex-col min-h-[700px] bg-surface-card animate-fade-in">
-              <div className="grid grid-cols-[60px_1fr] border-b border-border bg-surface-hover/30">
-                <div className="border-r border-border" />
-                <div className="grid grid-cols-7 divide-x divide-border">
-                  {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((d, i) => (
-                    <div key={i} className="py-3 text-center">
-                      <p className="text-[10px] font-bold text-text-muted uppercase tracking-tighter">{d}</p>
-                      <p className="text-sm font-black text-text-primary mt-0.5">{12 + i}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-sm text-text-primary group-hover:text-accent transition-colors truncate">{s.title}</p>
+                      <div className="flex items-center gap-3 text-[10px] text-text-muted mt-0.5">
+                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                        {s.location && <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{s.location}</span>}
+                      </div>
                     </div>
-                  ))}
-                </div>
+                    <span className={cn('badge shrink-0', status.class)}>{status.label}</span>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {/* Detail modal */}
+      {selected && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setSelected(null)}>
+          <div className="bg-surface-card rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <span className={cn('badge mb-2', (TYPE_LABELS[selected.type] ?? TYPE_LABELS.OTHER).bg)}>
+                  {(TYPE_LABELS[selected.type] ?? TYPE_LABELS.OTHER).label}
+                </span>
+                <h3 className="font-headline font-bold text-lg text-primary">{selected.title}</h3>
               </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar">
-                <div className="grid grid-cols-[60px_1fr] h-[1200px]">
-                  <div className="border-r border-border flex flex-col">
-                    {Array.from({ length: 24 }).map((_, h) => (
-                      <div key={h} className="h-[50px] text-[10px] font-bold text-text-muted text-center pt-2">
-                        {String(h).padStart(2, '0')}:00
-                      </div>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-7 divide-x divide-border relative">
-                    {Array.from({ length: 7 }).map((_, i) => (
-                      <div key={i} className="relative flex flex-col group">
-                        {Array.from({ length: 24 }).map((_, h) => (
-                          <div key={h} className="h-[50px] border-b border-border/30 hover:bg-surface-hover/50 transition-colors cursor-crosshair" />
-                        ))}
-                        {i === 2 && (
-                          <div className="absolute top-[450px] left-1 right-1 bg-primary text-black p-2 rounded-xl shadow-lg border border-white/10 z-10 transition-transform hover:scale-[1.02] cursor-pointer">
-                            <p className="text-[10px] font-black">Reunião Geral</p>
-                            <p className="text-[8px] opacity-70">09:00 - 10:30</p>
-                          </div>
-                        )}
-                        {i === 5 && (
-                          <div className="absolute top-[850px] left-1 right-1 bg-secondary text-white p-2 rounded-xl shadow-lg border border-white/10 z-10 transition-transform hover:scale-[1.02] cursor-pointer">
-                            <p className="text-[10px] font-black">Gravação VT</p>
-                            <p className="text-[8px] opacity-70">17:00 - 19:00</p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+              <button onClick={() => setSelected(null)} className="p-1.5 rounded-lg hover:bg-surface-hover text-text-muted"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center gap-2 text-text-secondary">
+                <Clock className="w-4 h-4 text-text-muted" />
+                {new Date(selected.startDate).toLocaleString('pt-BR', { dateStyle: 'full', timeStyle: 'short' })}
+              </div>
+              {selected.location && (
+                <div className="flex items-center gap-2 text-text-secondary">
+                  <MapPin className="w-4 h-4 text-text-muted" />{selected.location}
                 </div>
+              )}
+              {selected.responsibleName && (
+                <div className="flex items-center gap-2 text-text-secondary">
+                  <Users className="w-4 h-4 text-text-muted" />{selected.responsibleName}
+                </div>
+              )}
+              {selected.description && <p className="text-text-secondary leading-relaxed pt-2 border-t border-border/50">{selected.description}</p>}
+              <div className="flex items-center gap-2 pt-2 border-t border-border/50">
+                <span className={cn('badge', (STATUS_CONFIG[selected.status] ?? STATUS_CONFIG.SCHEDULED).class)}>
+                  {(STATUS_CONFIG[selected.status] ?? STATUS_CONFIG.SCHEDULED).label}
+                </span>
+                {selected.isPublic && <span className="badge badge-info">Público</span>}
               </div>
             </div>
-          )}
+          </div>
+        </div>
+      )}
 
-          {viewMode === 'Dia' && (
-            <div className="flex flex-col min-h-[700px] bg-surface-card animate-fade-in">
-              <div className="p-6 border-b border-border bg-surface-hover/30 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-accent text-white flex flex-col items-center justify-center shadow-lg shadow-accent/20">
-                  <span className="text-[10px] font-bold leading-none uppercase">Abr</span>
-                  <span className="text-xl font-black leading-none mt-1">20</span>
+      {/* Create modal */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => !submitting && setShowForm(false)}>
+          <div className="bg-surface-card rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-headline font-bold text-xl text-primary">Novo Evento</h3>
+              <button onClick={() => setShowForm(false)} className="p-1.5 rounded-lg hover:bg-surface-hover text-text-muted"><X className="w-5 h-5" /></button>
+            </div>
+            {formError && <div className="mb-4 p-3 rounded-lg bg-danger/10 border border-danger/20 text-danger text-sm">{formError}</div>}
+            <form className="space-y-4" onSubmit={handleSubmit}>
+              <div>
+                <label className={labelCls}>Título *</label>
+                <input name="title" value={form.title} onChange={handleChange} className={inputCls} placeholder="Nome do evento" required />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Tipo</label>
+                  <select name="type" value={form.type} onChange={handleChange} className={inputCls}>
+                    {Object.entries(TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                  </select>
                 </div>
                 <div>
-                  <h3 className="font-headline font-black text-xl text-text-primary">Segunda-feira</h3>
-                  <p className="text-sm text-text-secondary font-medium">Você tem 4 compromissos confirmados para hoje</p>
+                  <label className={labelCls}>Responsável</label>
+                  <input name="responsibleName" value={form.responsibleName} onChange={handleChange} className={inputCls} placeholder="Nome" />
+                </div>
+                <div>
+                  <label className={labelCls}>Início *</label>
+                  <input type="datetime-local" name="startDate" value={form.startDate} onChange={handleChange} className={inputCls} required />
+                </div>
+                <div>
+                  <label className={labelCls}>Fim</label>
+                  <input type="datetime-local" name="endDate" value={form.endDate} onChange={handleChange} className={inputCls} />
+                </div>
+                <div className="col-span-2">
+                  <label className={labelCls}>Local</label>
+                  <input name="location" value={form.location} onChange={handleChange} className={inputCls} placeholder="Endereço ou nome do local" />
+                </div>
+                <div className="col-span-2">
+                  <label className={labelCls}>Descrição</label>
+                  <textarea name="description" value={form.description} onChange={handleChange} className={cn(inputCls, 'resize-none h-20')} />
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-                <div className="relative pl-16 space-y-6">
-                  <div className="absolute left-[30px] top-0 bottom-0 w-0.5 bg-border/50" />
-                  {[
-                    { time: '08:30', title: 'Café com Lideranças', type: 'Institucional', color: 'bg-primary' },
-                    { time: '12:00', title: 'Almoço de Negócios', type: 'Almoço', color: 'bg-text-muted text-white' },
-                    { time: '15:00', title: 'Entrevista Regional', type: 'Imprensa', color: 'bg-accent' },
-                    { time: '19:30', title: 'Comício Bairro Norte', type: 'Campanha', color: 'bg-secondary' },
-                  ].map((event, i) => (
-                    <div key={i} className="relative flex gap-4 animate-slide-in" style={{ animationDelay: `${i * 100}ms` }}>
-                      <div className={cn("absolute left-[-34px] w-2.5 h-2.5 rounded-full ring-4 ring-surface-card z-10 mt-1.5 shadow-sm", event.color)} />
-                      <span className="absolute left-[-64px] text-[10px] font-black text-text-muted mt-1 uppercase">{event.time}</span>
-                      <div className="flex-1 bg-surface-hover/60 p-4 rounded-2xl border border-border/50 hover:border-accent/40 hover:bg-surface-hover hover:shadow-xl transition-all cursor-pointer group">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className={cn("px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest text-white mb-2 inline-block", event.color)}>
-                              {event.type}
-                            </span>
-                            <h4 className="font-bold text-text-primary text-base group-hover:text-accent transition-colors">{event.title}</h4>
-                            <div className="flex items-center gap-3 mt-3 text-[10px] text-text-secondary font-medium uppercase tracking-tight">
-                              <span className="flex items-center gap-1"><MapPin className="w-3 h-3 text-accent" /> Auditório Municipal</span>
-                              <span className="flex items-center gap-1"><Users className="w-3 h-3 text-accent" /> Direção Executiva</span>
-                            </div>
-                          </div>
-                          <div className="flex -space-x-2">
-                             {[1, 2, 3].map(avatar => (
-                               <img key={avatar} className="w-6 h-6 rounded-full border-2 border-surface-card" src={`https://i.pravatar.cc/100?u=${avatar + i + 20}`} alt="avatar" />
-                             ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setShowForm(false)} disabled={submitting} className="flex-1 py-2.5 rounded-xl border border-border text-text-secondary font-bold text-sm hover:bg-surface-hover transition-colors disabled:opacity-50">Cancelar</button>
+                <button type="submit" disabled={submitting} className="flex-1 gradient-accent text-white font-bold text-sm py-2.5 rounded-xl shadow shadow-accent/20 flex items-center justify-center gap-2 disabled:opacity-50">
+                  {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {submitting ? 'Salvando...' : 'Salvar Evento'}
+                </button>
               </div>
-            </div>
-          )}
-
+            </form>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -7,22 +7,25 @@ import {
   LayoutDashboard, CalendarDays, Zap, Users2, Users,
   Mic2, Star, Contact2, AlertCircle, ClipboardList,
   Settings, LogOut, Landmark, ChevronLeft, ChevronRight,
-  Shield, BarChart3, Bell,  X
+  Shield, BarChart3, Bell, X, UserSquare, Building2, Map
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
 
 const mainNavItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-  { icon: CalendarDays, label: 'Agenda', path: '/agenda' },
-  { icon: Zap, label: 'Ações', path: '/acoes' },
-  { icon: Users2, label: 'Comitês', path: '/comites' },
-  { icon: Users, label: 'Equipes', path: '/equipes' },
-  { icon: Mic2, label: 'Assessores', path: '/assessores' },
-  { icon: Star, label: 'Lideranças', path: '/liderancas' },
-  { icon: Contact2, label: 'CRM Político', path: '/crm' },
-  { icon: AlertCircle, label: 'Demandas', path: '/demandas' },
-  { icon: ClipboardList, label: 'Tarefas', path: '/tarefas' },
+  { icon: LayoutDashboard, label: 'Dashboard',    path: '/dashboard'   },
+  { icon: UserSquare,      label: 'Candidato',    path: '/candidato'   },
+  { icon: CalendarDays,    label: 'Agenda',       path: '/agenda'      },
+  { icon: Zap,             label: 'Ações',        path: '/acoes'       },
+  { icon: Building2,       label: 'Gabinete',     path: '/gabinete'    },
+  { icon: Users2,          label: 'Comitês',      path: '/comites'     },
+  { icon: Users,           label: 'Equipes',      path: '/equipes'     },
+  { icon: Mic2,            label: 'Assessores',   path: '/assessores'  },
+  { icon: Star,            label: 'Lideranças',   path: '/liderancas'  },
+  { icon: Contact2,        label: 'CRM Político', path: '/crm'         },
+  { icon: AlertCircle,     label: 'Demandas',     path: '/demandas'    },
+  { icon: ClipboardList,   label: 'Tarefas',      path: '/tarefas'     },
+  { icon: Map,             label: 'Territórios',  path: '/territorios' },
 ];
 
 const bottomNavItems = [

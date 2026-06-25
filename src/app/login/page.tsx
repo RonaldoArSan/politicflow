@@ -157,7 +157,7 @@ export default function LoginPage() {
                 <label className="block text-xs font-bold uppercase tracking-widest text-text-secondary" htmlFor="login-password">
                   Senha
                 </label>
-                <a className="text-xs font-semibold text-accent hover:underline decoration-2 underline-offset-4" href="#">
+                <a className="text-xs font-semibold text-accent hover:underline decoration-2 underline-offset-4" href="/reset-password">
                   Esqueceu?
                 </a>
               </div>
